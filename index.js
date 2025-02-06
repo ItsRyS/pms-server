@@ -28,7 +28,7 @@ if (!DB_HOST || !DB_USER || !DB_PASSWORD || !DB_NAME) {
 // การตั้งค่า CORS
 app.use(
   cors({
-    origin: ENV === "development" ? "http://localhost:5173" : "https://your-production-url.com",
+    origin: ENV === "development" ? "http://localhost:5173" : "https://new-li2jzsvxlm-itsrys-projects.vercel.app",
     credentials: true,
   })
 );
