@@ -25,13 +25,25 @@ if (!DB_HOST || !DB_USER || !DB_PASSWORD || !DB_NAME) {
   process.exit(1); // ปิดโปรแกรมถ้าตั้งค่าไม่ถูกต้อง
 }
 
-// การตั้งค่า CORS
-app.use(
-  cors({
-    origin: ENV === "development" ? "http://localhost:5173" : "https://new-li2jzsvxlm-itsrys-projects.vercel.app",
-    credentials: true,
-  })
-);
+const allowedOrigins = [
+  "https://new-pms.vercel.app",
+  "https://new-pms-git-main-itsrys-projects.vercel.app",
+  "https://new-li2jzsvxlm-itsrys-projects.vercel.app",
+];
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("CORS policy does not allow this origin"));
+    }
+  },
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
+
 
 // การตั้งค่า Session Store
 const sessionStore = new MySQLStore({
