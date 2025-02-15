@@ -30,15 +30,25 @@ app.use(express.json());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// ✅ Middleware ตรวจสอบ JWT Token
-const authenticateJWT = (req, res, next) => {
+// ✅ Middleware ตรวจสอบและต่ออายุ JWT
+const verifyToken = (req, res, next) => {
   const token = req.cookies.token || req.headers["authorization"]?.split(" ")[1];
 
   if (!token) return res.status(401).json({ message: "Unauthorized" });
 
   jwt.verify(token, JWT_SECRET, (err, decoded) => {
     if (err) return res.status(403).json({ message: "Token is invalid" });
+
     req.user = decoded;
+
+    const newToken = jwt.sign(
+      { user_id: decoded.user_id, role: decoded.role, username: decoded.username },
+      JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || "1d" }
+    );
+
+    res.setHeader("Authorization", `Bearer ${newToken}`);
+
     next();
   });
 };
@@ -69,16 +79,16 @@ const oldProjectsRoutes = require("./src/routes/oldProjects");
 
 // API Routes
 app.use("/api/auth", authRoutes);
-app.use("/api/projects", authenticateJWT, projectRoutes);
-app.use("/api/teacher", authenticateJWT, teacherRoutes);
-app.use("/api/document", authenticateJWT, documentRoutes);
-app.use("/api/users", authenticateJWT, userRoutes);
-app.use("/api/project-requests", authenticateJWT, projectRequestsRoutes);
-app.use("/api/document-types", authenticateJWT, projectDocumentsRoutes);
-app.use("/api/project-documents", authenticateJWT, projectDocumentsRoutes);
-app.use("/api/project-release", authenticateJWT, projectReleaseRoutes);
-app.use("/api/project-types", authenticateJWT, projectTypesRoutes);
-app.use("/api/old-projects", authenticateJWT, oldProjectsRoutes);
+app.use("/api/projects", verifyToken, projectRoutes);
+app.use("/api/teacher", verifyToken, teacherRoutes);
+app.use("/api/document", verifyToken, documentRoutes);
+app.use("/api/users", verifyToken, userRoutes);
+app.use("/api/project-requests", verifyToken, projectRequestsRoutes);
+app.use("/api/document-types", verifyToken, projectDocumentsRoutes);
+app.use("/api/project-documents", verifyToken, projectDocumentsRoutes);
+app.use("/api/project-release", verifyToken, projectReleaseRoutes);
+app.use("/api/project-types", verifyToken, projectTypesRoutes);
+app.use("/api/old-projects", verifyToken, oldProjectsRoutes);
 
 // Test API
 app.get("/api/test", (req, res) => {
