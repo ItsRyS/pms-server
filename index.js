@@ -3,69 +3,57 @@ const express = require("express");
 const path = require("path");
 const cors = require("cors");
 const bodyParser = require("body-parser");
-const session = require("express-session");
-const MySQLStore = require("express-mysql-session")(session);
 const cookieParser = require("cookie-parser");
+const jwt = require("jsonwebtoken");
 
 const app = express();
 const ENV = process.env.NODE_ENV || "development";
 const PORT = ENV === "development" ? process.env.DEV_PORT : process.env.PROD_PORT;
-const DB_HOST = ENV === "development" ? process.env.DEV_DB_HOST : process.env.PROD_DB_HOST;
-const DB_PORT = ENV === "development" ? process.env.DEV_DB_PORT : process.env.PROD_DB_PORT;
-const DB_USER = ENV === "development" ? process.env.DEV_DB_USER : process.env.PROD_DB_USER;
-const DB_PASSWORD = ENV === "development" ? process.env.DEV_DB_PASSWORD : process.env.PROD_DB_PASSWORD;
-const DB_NAME = ENV === "development" ? process.env.DEV_DB_NAME : process.env.PROD_DB_NAME;
 
-app.use(cors({
-  origin: process.env.FRONTEND_URL || "https://pms-client-production.up.railway.app",
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "x-tab-id"]
-}));
+// JWT Secret Key
+const JWT_SECRET = process.env.JWT_SECRET || "yourSuperSecretKey";
+
+// CORS Middleware
+app.use(
+  cors({
+    origin: process.env.CORS_ORIGIN || "https://pms-client-production.up.railway.app",
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
 
 app.use(cookieParser());
-
-// Session Store Configuration
-const sessionStore = new MySQLStore({
-  host: DB_HOST,
-  user: DB_USER,
-  password: DB_PASSWORD,
-  database: DB_NAME,
-  port: DB_PORT,
-});
-
-app.use(session({
-  key: "user_sid",
-  secret: "itpms2024",
-  resave: false,
-  saveUninitialized: false,
-  store: sessionStore,
-  cookie: {
-    maxAge: 1000 * 60 * 60 * 24, // 1 วัน
-    secure: ENV === "production",
-    httpOnly: true,
-    sameSite: "None",
-  },
-}));
-
 
 // Middleware
 app.use(express.json());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
-// ✅ Debug Middleware สำหรับตรวจสอบ Session
-app.use((req, res, next) => {
-  console.log("🔍 Session Debug:", req.session);
-  next();
-});
-// Static Files สำหรับอัปโหลด PDF และรูปภาพ
-app.use('/upload', express.static(path.join(__dirname, 'upload'), {
-  setHeaders: (res, filePath) => {
-    if (path.extname(filePath) === '.pdf'|| path.extname(filePath) === '.jpg' || path.extname(filePath) === '.png') {
-      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-    }
-  },
-}));
+
+// ✅ Middleware ตรวจสอบ JWT Token
+const authenticateJWT = (req, res, next) => {
+  const token = req.cookies.token || req.headers["authorization"]?.split(" ")[1];
+
+  if (!token) return res.status(401).json({ message: "Unauthorized" });
+
+  jwt.verify(token, JWT_SECRET, (err, decoded) => {
+    if (err) return res.status(403).json({ message: "Token is invalid" });
+    req.user = decoded;
+    next();
+  });
+};
+
+// Static Files (PDF & Images)
+app.use(
+  "/upload",
+  express.static(path.join(__dirname, "upload"), {
+    setHeaders: (res, filePath) => {
+      if ([".pdf", ".jpg", ".png"].includes(path.extname(filePath))) {
+        res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+      }
+    },
+  })
+);
 
 // Import Routes
 const authRoutes = require("./src/routes/auth");
@@ -75,21 +63,23 @@ const documentRoutes = require("./src/routes/document");
 const userRoutes = require("./src/routes/users");
 const projectRequestsRoutes = require("./src/routes/projectRequests");
 const projectDocumentsRoutes = require("./src/routes/project_documents");
-const projectReleaseRoutes = require('./src/routes/projectRelease');
-const projectTypesRoutes = require('./src/routes/projectTypes');
+const projectReleaseRoutes = require("./src/routes/projectRelease");
+const projectTypesRoutes = require("./src/routes/projectTypes");
 const oldProjectsRoutes = require("./src/routes/oldProjects");
+
 // API Routes
 app.use("/api/auth", authRoutes);
-app.use("/api/projects", projectRoutes);
-app.use("/api/teacher", teacherRoutes);
-app.use("/api/document", documentRoutes);
-app.use("/api/users", userRoutes);
-app.use("/api/project-requests", projectRequestsRoutes);
-app.use("/api/document-types", projectDocumentsRoutes);
-app.use("/api/project-documents", projectDocumentsRoutes);
-app.use("/api/project-release", projectReleaseRoutes);
-app.use('/api/project-types', projectTypesRoutes);
-app.use("/api/old-projects", oldProjectsRoutes);
+app.use("/api/projects", authenticateJWT, projectRoutes);
+app.use("/api/teacher", authenticateJWT, teacherRoutes);
+app.use("/api/document", authenticateJWT, documentRoutes);
+app.use("/api/users", authenticateJWT, userRoutes);
+app.use("/api/project-requests", authenticateJWT, projectRequestsRoutes);
+app.use("/api/document-types", authenticateJWT, projectDocumentsRoutes);
+app.use("/api/project-documents", authenticateJWT, projectDocumentsRoutes);
+app.use("/api/project-release", authenticateJWT, projectReleaseRoutes);
+app.use("/api/project-types", authenticateJWT, projectTypesRoutes);
+app.use("/api/old-projects", authenticateJWT, oldProjectsRoutes);
+
 // Test API
 app.get("/api/test", (req, res) => {
   res.json({ message: "API is working!" });
@@ -118,5 +108,5 @@ app.use((err, req, res) => {
 
 // Start Server
 app.listen(PORT, () => {
-  console.log(`index.js  : ${ENV} Server running on http://localhost:${PORT}`);
+  console.log(`🚀 Server running on http://localhost:${PORT}`);
 });

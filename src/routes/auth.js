@@ -1,12 +1,13 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const authController = require('../controllers/authController');
+const authController = require("../controllers/authController");
+const { verifyToken } = require("../middleware/authMiddleware");
 
-router.post('/login', authController.login);
-router.post('/register', authController.register);
-router.post('/logout', authController.logout);
-router.get('/check-session', authController.checkSession);
-router.get('/refresh-session', authController.refreshSession);
-router.post('/update-session', authController.updateSession); // เพิ่ม route นี้
+router.post("/login", authController.login);
+router.post("/register", authController.register);
+router.post("/logout", authController.logout);
+router.get("/check-session", verifyToken, (req, res) => {
+  res.status(200).json({ isAuthenticated: true, user: req.user });
+});
 
 module.exports = router;
