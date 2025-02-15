@@ -1,4 +1,5 @@
-import jwt from "jsonwebtoken";
+const jwt = require("jsonwebtoken");
+
 const authenticateSession = (req, res, next) => {
   const tabId = req.headers['x-tab-id'];
   if (!tabId) return res.status(400).json({ error: "Missing Tab ID" });
