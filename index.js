@@ -13,15 +13,17 @@ const PORT = ENV === "development" ? process.env.DEV_PORT : process.env.PROD_POR
 // JWT Secret Key
 const JWT_SECRET = process.env.JWT_SECRET || "yourSuperSecretKey";
 
-// CORS Middleware
+
+
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || "https://pms-client-production.up.railway.app",
+    origin: "https://pms-client-production.up.railway.app",
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
+
 
 app.use(cookieParser());
 
