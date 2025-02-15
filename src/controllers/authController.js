@@ -1,19 +1,5 @@
 const bcrypt = require('bcrypt');
 const db = require('../config/db');
-const { z } = require('zod');
-
-
-// สร้าง Zod schema สำหรับ register
-const registerSchema = z.object({
-  username: z.string().min(1, 'Username is required'),
-  email: z.string().email('Invalid email format'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-});
-
-// สร้าง Zod schema สำหรับ logout
-const logoutSchema = z.object({
-  tabId: z.string().nonempty('Missing tabId'),
-});
 
 exports.login = async (req, res) => {
   try {
@@ -33,19 +19,15 @@ exports.login = async (req, res) => {
 
     res.cookie("session_id", req.sessionID, { httpOnly: true, secure: true, sameSite: "None" });
     res.status(200).json({ message: "Login successful", user: req.session.tabs[tabId] });
-  } catch  {
+  } catch {
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
 
-// ฟังก์ชันลงทะเบียน
 exports.register = async (req, res) => {
   try {
-    // ตรวจสอบข้อมูล req.body ด้วย Zod
-    const { username, email, password } = registerSchema.parse(req.body);
+    const { username, email, password } = req.body;
 
-    // ทำงาน logic ต่อเมื่อ parse ผ่านแล้ว
-    // ตรวจสอบว่า email ซ้ำหรือไม่
     const [existingUser] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
     if (existingUser.length > 0) {
       return res.status(409).json({ error: 'อีเมลนี้ถูกใช้ไปแล้ว' });
@@ -61,22 +43,14 @@ exports.register = async (req, res) => {
       userId: result.insertId,
     });
   } catch (error) {
-    // ดัก Zod error
-    if (error.name === 'ZodError') {
-      const messages = error.errors.map((e) => e.message).join(', ');
-      return res.status(400).json({ error: messages });
-    }
-
     console.error('Failed to register user:', error.message);
     res.status(500).json({ error: 'เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์' });
   }
 };
 
-// ฟังก์ชันออกจากระบบ
 exports.logout = (req, res) => {
   try {
-    // ตรวจสอบข้อมูล req.body ด้วย Zod
-    const { tabId } = logoutSchema.parse(req.body);
+    const { tabId } = req.body;
 
     if (req.session && req.session.tabs && req.session.tabs[tabId]) {
       delete req.session.tabs[tabId];
@@ -85,43 +59,34 @@ exports.logout = (req, res) => {
       res.status(400).json({ error: 'Invalid tabId', success: false });
     }
   } catch (error) {
-    // ดัก Zod error
-    if (error.name === 'ZodError') {
-      const messages = error.errors.map((e) => e.message).join(', ');
-      return res.status(400).json({ error: messages, success: false });
-    }
     console.error('เกิดข้อผิดพลาดในการออกจากระบบ:', error.message);
     return res.status(500).json({ error: 'เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์', success: false });
   }
 };
 
-// ฟังก์ชันตรวจสอบสถานะ Session
 exports.checkSession = (req, res) => {
   const tabId = req.headers['x-tab-id'];
 
   if (req.session && req.session.tabs && req.session.tabs[tabId]) {
-    req.session.touch(); // ✅ ต่ออายุ Session
-    req.session.cookie.maxAge = 1000 * 60 * 60 * 24; // ✅ รีเซ็ตอายุของ Cookie
+    req.session.touch();
+    req.session.cookie.maxAge = 1000 * 60 * 60 * 24;
     res.status(200).json({ isAuthenticated: true, user: req.session.tabs[tabId] });
   } else {
     res.status(401).json({ isAuthenticated: false });
   }
 };
 
-
-// ฟังก์ชันต่ออายุ Session
 exports.refreshSession = (req, res) => {
   const tabId = req.headers['x-tab-id'];
 
   if (req.session && req.session.tabs && req.session.tabs[tabId]) {
-    req.session.touch(); // ต่ออายุ Session
+    req.session.touch();
     res.status(200).json({ success: true, message: 'Session refreshed' });
   } else {
     res.status(401).json({ success: false, message: 'Session expired' });
   }
 };
 
-// ฟังก์ชันอัปเดตเซสชัน
 exports.updateSession = async (req, res) => {
   const { tabId, username, profileImage } = req.body;
 
@@ -130,7 +95,6 @@ exports.updateSession = async (req, res) => {
   }
 
   if (req.session && req.session.tabs && req.session.tabs[tabId]) {
-    // อัปเดตข้อมูลผู้ใช้ในเซสชัน
     if (username) req.session.tabs[tabId].username = username;
     if (profileImage) req.session.tabs[tabId].profileImage = profileImage;
 

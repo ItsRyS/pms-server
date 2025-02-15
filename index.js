@@ -6,9 +6,8 @@ const bodyParser = require("body-parser");
 const session = require("express-session");
 const MySQLStore = require("express-mysql-session")(session);
 const cookieParser = require("cookie-parser");
-const app = express();
 
-// ตรวจสอบ Environment
+const app = express();
 const ENV = process.env.NODE_ENV || "development";
 const PORT = ENV === "development" ? process.env.DEV_PORT : process.env.PROD_PORT;
 const DB_HOST = ENV === "development" ? process.env.DEV_DB_HOST : process.env.PROD_DB_HOST;
@@ -21,8 +20,9 @@ app.use(cors({
   origin: process.env.FRONTEND_URL || "https://pms-client-production.up.railway.app",
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"]
+  allowedHeaders: ["Content-Type", "Authorization", "x-tab-id"]
 }));
+
 app.use(cookieParser());
 
 // Session Store Configuration
@@ -34,21 +34,19 @@ const sessionStore = new MySQLStore({
   port: DB_PORT,
 });
 
-app.use(
-  session({
-    key: "user_sid",
-    secret: "itpms2024",
-    resave: false,
-    saveUninitialized: false,
-    store: sessionStore,
-    cookie: {
-      maxAge: 1000 * 60 * 60 * 24, // อายุ 1 วัน
-      secure: ENV === "production",
-      httpOnly: true,
-      sameSite: "None",
-    },
-  })
-);
+app.use(session({
+  key: "user_sid",
+  secret: "itpms2024",
+  resave: false,
+  saveUninitialized: false,
+  store: sessionStore,
+  cookie: {
+    maxAge: 1000 * 60 * 60 * 24, // 1 วัน
+    secure: ENV === "production",
+    httpOnly: true,
+    sameSite: "None",
+  },
+}));
 
 
 // Middleware
