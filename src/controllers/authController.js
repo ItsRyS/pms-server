@@ -131,11 +131,14 @@ exports.checkSession = (req, res) => {
   const tabId = req.headers['x-tab-id'];
 
   if (req.session && req.session.tabs && req.session.tabs[tabId]) {
+    req.session.touch(); // ✅ ต่ออายุ Session
+    req.session.cookie.maxAge = 1000 * 60 * 60 * 24; // ✅ รีเซ็ตอายุของ Cookie
     res.status(200).json({ isAuthenticated: true, user: req.session.tabs[tabId] });
   } else {
     res.status(401).json({ isAuthenticated: false });
   }
 };
+
 
 // ฟังก์ชันต่ออายุ Session
 exports.refreshSession = (req, res) => {

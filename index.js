@@ -44,11 +44,13 @@ app.use(
     store: sessionStore,
     cookie: {
       maxAge: 1000 * 60 * 60 * 24, // อายุ 1 วัน
-      secure: ENV === "production",
+      secure: ENV === "production", // ✅ ใช้ true ถ้า Deploy บน HTTPS
       httpOnly: true,
+      sameSite: ENV === "production" ? "None" : "Lax", // ✅ ใช้ "None" สำหรับ Cross-Origin Cookies
     },
   })
 );
+
 
 // Middleware
 app.use(express.json());
