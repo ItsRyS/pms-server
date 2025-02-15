@@ -7,25 +7,25 @@ exports.uploadDocument = async (req, res) => {
     const { doc_title, doc_description, uploaded_by } = req.body;
     const file = req.file;
 
-    if (!doc_title || !doc_description || !uploaded_by || !file) {
+    if (!file) {
+      return res.status(400).json({ message: "No file uploaded. Please attach a file." });
+    }
+    if (!doc_title || !doc_description || !uploaded_by) {
       return res.status(400).json({ message: "All fields are required." });
     }
 
     const fileName = `${Date.now()}_${file.originalname}`;
-    const filePath = `Document/${fileName}`; // ✅ เก็บในโฟลเดอร์ `Document`
+    const filePath = `Document/${fileName}`;
 
-    // 🔥 อัปโหลดไฟล์ไปยัง Supabase
     const { error } = await supabase.storage
       .from("upload")
       .upload(filePath, file.buffer, { contentType: file.mimetype });
 
     if (error) throw error;
 
-    // 🔥 รับ URL ของไฟล์ที่อัปโหลด
     const { data: fileUrlData } = supabase.storage.from("upload").getPublicUrl(filePath);
     const fileUrl = fileUrlData.publicUrl;
 
-    // ✅ บันทึก URL ของไฟล์ลงฐานข้อมูล
     const [result] = await db.query(
       `INSERT INTO document_forms (doc_title, doc_description, doc_path, uploaded_by, upload_date)
        VALUES (?, ?, ?, ?, ?)`,
@@ -38,6 +38,7 @@ exports.uploadDocument = async (req, res) => {
     res.status(500).json({ message: "Upload failed", error: error.message });
   }
 };
+
 
 
 // ดึงข้อมูลเอกสารจากฐานข้อมูล
