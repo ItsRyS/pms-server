@@ -9,21 +9,22 @@ const MySQLStore = require("express-mysql-session")(session);
 const app = express();
 
 // ตรวจสอบ Environment
-const ENV = process.env.NODE_ENV || "production";
+const ENV = process.env.NODE_ENV || "development";
 const PORT = ENV === "development" ? process.env.DEV_PORT : process.env.PROD_PORT;
 const DB_HOST = ENV === "development" ? process.env.DEV_DB_HOST : process.env.PROD_DB_HOST;
 const DB_PORT = ENV === "development" ? process.env.DEV_DB_PORT : process.env.PROD_DB_PORT;
 const DB_USER = ENV === "development" ? process.env.DEV_DB_USER : process.env.PROD_DB_USER;
 const DB_PASSWORD = ENV === "development" ? process.env.DEV_DB_PASSWORD : process.env.PROD_DB_PASSWORD;
 const DB_NAME = ENV === "development" ? process.env.DEV_DB_NAME : process.env.PROD_DB_NAME;
-
+const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 // CORS Configuration
 app.use(
   cors({
-    origin: ENV === "development" ? "http://localhost:5173" : "https://itnewpms.vercel.app",
-    credentials: true, // ใช้ cookies ข้าม origin
+    origin: FRONTEND_URL,
+    credentials: true,
   })
 );
+
 
 // Session Store Configuration
 const sessionStore = new MySQLStore({
@@ -53,12 +54,16 @@ app.use(
 app.use(express.json());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
-
+// ✅ Debug Middleware สำหรับตรวจสอบ Session
+app.use((req, res, next) => {
+  console.log("🔍 Session Debug:", req.session);
+  next();
+});
 // Static Files สำหรับอัปโหลด PDF และรูปภาพ
 app.use('/upload', express.static(path.join(__dirname, 'upload'), {
   setHeaders: (res, filePath) => {
-    if (path.extname(filePath) === '.pdf') {
-      res.setHeader('Content-Disposition', 'inline');
+    if (path.extname(filePath) === '.pdf'|| path.extname(filePath) === '.jpg' || path.extname(filePath) === '.png') {
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     }
   },
 }));
@@ -73,7 +78,7 @@ const projectRequestsRoutes = require("./src/routes/projectRequests");
 const projectDocumentsRoutes = require("./src/routes/project_documents");
 const projectReleaseRoutes = require('./src/routes/projectRelease');
 const projectTypesRoutes = require('./src/routes/projectTypes');
-
+const oldProjectsRoutes = require("./src/routes/oldProjects");
 // API Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/projects", projectRoutes);
@@ -85,7 +90,7 @@ app.use("/api/document-types", projectDocumentsRoutes);
 app.use("/api/project-documents", projectDocumentsRoutes);
 app.use("/api/project-release", projectReleaseRoutes);
 app.use('/api/project-types', projectTypesRoutes);
-
+app.use("/api/old-projects", oldProjectsRoutes);
 // Test API
 app.get("/api/test", (req, res) => {
   res.json({ message: "API is working!" });
