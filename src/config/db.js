@@ -2,27 +2,24 @@ const mysql = require("mysql2");
 
 const ENV = process.env.NODE_ENV || "development";
 
-// ตั้งค่าการเชื่อมต่อฐานข้อมูล
-const dbConfig = {
-  host: ENV === "development" ? process.env.DEV_DB_HOST : process.env.PROD_DB_HOST,
-  user: ENV === "development" ? process.env.DEV_DB_USER : process.env.PROD_DB_USER,
-  password: ENV === "development" ? process.env.DEV_DB_PASSWORD : process.env.PROD_DB_PASSWORD,
-  database: ENV === "development" ? process.env.DEV_DB_NAME : process.env.PROD_DB_NAME,
-  port: ENV === "development" ? process.env.DEV_DB_PORT : process.env.PROD_DB_PORT,
-  ssl: ENV === "production" ? { rejectUnauthorized: true } : false, // ใช้ SSL เฉพาะ Production
+const connection = mysql.createPool({
+  host: ENV === "production" ? process.env.PROD_DB_HOST : process.env.DEV_DB_HOST,
+  port: ENV === "production" ? process.env.PROD_DB_PORT : process.env.DEV_DB_PORT,
+  user: ENV === "production" ? process.env.PROD_DB_USER : process.env.DEV_DB_USER,
+  password: ENV === "production" ? process.env.PROD_DB_PASSWORD : process.env.DEV_DB_PASSWORD,
+  database: ENV === "production" ? process.env.PROD_DB_NAME : process.env.DEV_DB_NAME,
   waitForConnections: true,
-  connectionLimit: 10, // จำกัดการเชื่อมต่อพร้อมกัน
-  queueLimit: 0, // ไม่จำกัดจำนวนคิวรอ
-};
-
+  connectionLimit: 10,
+  queueLimit: 0,
+});
 // ใช้ Pool + Promise
-const pool = mysql.createPool(dbConfig).promise();
+const pool = mysql.createPool(connection).promise();
 
 // ตรวจสอบการเชื่อมต่อฐานข้อมูล
 const checkConnection = async () => {
   try {
     const connection = await pool.getConnection();
-    console.log(`✅ Connected to database: ${dbConfig.database} at ${dbConfig.host}:${dbConfig.port}`);
+    console.log(`✅ Connected to database: ${connection.database} at ${connection.host}:${connection.port}`);
     connection.release();
   } catch (error) {
     console.error("❌ Database connection failed:", error.message);
