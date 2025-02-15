@@ -5,7 +5,7 @@ const cors = require("cors");
 const bodyParser = require("body-parser");
 const session = require("express-session");
 const MySQLStore = require("express-mysql-session")(session);
-
+const cookieParser = require("cookie-parser");
 const app = express();
 
 // ตรวจสอบ Environment
@@ -16,15 +16,14 @@ const DB_PORT = ENV === "development" ? process.env.DEV_DB_PORT : process.env.PR
 const DB_USER = ENV === "development" ? process.env.DEV_DB_USER : process.env.PROD_DB_USER;
 const DB_PASSWORD = ENV === "development" ? process.env.DEV_DB_PASSWORD : process.env.PROD_DB_PASSWORD;
 const DB_NAME = ENV === "development" ? process.env.DEV_DB_NAME : process.env.PROD_DB_NAME;
-const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
-// CORS Configuration
-app.use(
-  cors({
-    origin: FRONTEND_URL,
-    credentials: true,
-  })
-);
 
+app.use(cors({
+  origin: process.env.FRONTEND_URL || "https://pms-client-production.up.railway.app",
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
+app.use(cookieParser());
 
 // Session Store Configuration
 const sessionStore = new MySQLStore({
@@ -44,9 +43,9 @@ app.use(
     store: sessionStore,
     cookie: {
       maxAge: 1000 * 60 * 60 * 24, // อายุ 1 วัน
-      secure: ENV === "production", // ✅ ใช้ true ถ้า Deploy บน HTTPS
+      secure: ENV === "production",
       httpOnly: true,
-      sameSite: ENV === "production" ? "None" : "Lax", // ✅ ใช้ "None" สำหรับ Cross-Origin Cookies
+      sameSite: "None",
     },
   })
 );

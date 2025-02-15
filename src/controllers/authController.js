@@ -2,12 +2,6 @@ const bcrypt = require('bcrypt');
 const db = require('../config/db');
 const { z } = require('zod');
 
-// สร้าง Zod schema สำหรับ login
-const loginSchema = z.object({
-  email: z.string().email('Invalid email format'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-  tabId: z.string().nonempty('Missing tabId'),
-});
 
 // สร้าง Zod schema สำหรับ register
 const registerSchema = z.object({
@@ -21,51 +15,26 @@ const logoutSchema = z.object({
   tabId: z.string().nonempty('Missing tabId'),
 });
 
-// ฟังก์ชันเข้าสู่ระบบ
 exports.login = async (req, res) => {
   try {
-    // ตรวจสอบข้อมูล req.body ด้วย Zod
-    const { email, password, tabId } = loginSchema.parse(req.body);
+    const { email, password, tabId } = req.body;
+    if (!tabId) return res.status(400).json({ error: "Missing Tab ID" });
 
-    // ทำงาน logic ต่อเมื่อ parse ผ่านแล้ว (ไม่มี error)
     const [userResult] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
     const user = userResult[0];
 
-    if (!user) {
-      return res.status(401).json({ error: 'อีเมลหรือรหัสผ่านไม่ถูกต้อง' });
-    }
+    if (!user) return res.status(401).json({ error: "Invalid credentials" });
 
     const passwordMatch = await bcrypt.compare(password, user.password);
-    if (!passwordMatch) {
-      return res.status(401).json({ error: 'อีเมลหรือรหัสผ่านไม่ถูกต้อง' });
-    }
+    if (!passwordMatch) return res.status(401).json({ error: "Invalid credentials" });
 
-    // เก็บข้อมูลใน session โดยใช้ tabId เป็น key
-    if (!req.session.tabs) req.session.tabs = {};
-    req.session.tabs[tabId] = {
-      user_id: user.user_id,
-      role: user.role,
-      username: user.username,
-      profileImage: user.profile_image,
-    };
+    req.session.tabs = req.session.tabs || {};
+    req.session.tabs[tabId] = { user_id: user.user_id, role: user.role, username: user.username };
 
-    res.status(200).json({
-      message: 'Login successful',
-      user_id: user.user_id,
-      role: user.role,
-      username: user.username,
-      profileImage: user.profile_image,
-    });
-  } catch (error) {
-    // ดัก Zod error
-    if (error.name === 'ZodError') {
-      const messages = error.errors.map((e) => e.message).join(', ');
-      return res.status(400).json({ error: messages });
-    }
-
-    // ถ้าเป็น error อื่น (เช่น DB error) ส่ง 500
-    console.error('เกิดข้อผิดพลาดในการเข้าสู่ระบบ:', error.message);
-    res.status(500).json({ error: 'เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์' });
+    res.cookie("session_id", req.sessionID, { httpOnly: true, secure: true, sameSite: "None" });
+    res.status(200).json({ message: "Login successful", user: req.session.tabs[tabId] });
+  } catch  {
+    res.status(500).json({ error: "Internal Server Error" });
   }
 };
 
