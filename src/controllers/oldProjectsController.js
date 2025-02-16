@@ -136,7 +136,7 @@ exports.updateOldProject = async (req, res) => {
       document_year,
     } = req.body;
 
-    // ดึงข้อมูลโครงงานเก่า
+    // 🔍 ดึงข้อมูลโครงงานเก่า
     const [existingProject] = await db.query(
       'SELECT file_path FROM old_projects WHERE old_id = ?',
       [id]
@@ -148,16 +148,18 @@ exports.updateOldProject = async (req, res) => {
 
     let fileUrl = existingProject[0].file_path;
 
-    // ถ้ามีการอัปโหลดไฟล์ใหม่
+    // ✅ ถ้ามีการอัปโหลดไฟล์ใหม่
     if (req.file) {
-      // สร้างชื่อไฟล์ใหม่
-      const timestamp = Date.now();
-      const safeFilename = Buffer.from(req.file.originalname, 'latin1').toString('utf8')
-        .replace(/[^a-zA-Z0-9ก-๙.-]/g, '_');
-      newFilePath = `old_projects/${timestamp}_${safeFilename}`;
+      // ✅ ใช้ sanitizeFilename() เพื่อแก้ปัญหาชื่อไฟล์ภาษาไทยหรืออักขระพิเศษ
+      const fileExtension = path.extname(req.file.originalname);
+      const baseFilename = path.basename(req.file.originalname, fileExtension);
+      const sanitizedFilename = sanitizeFilename(baseFilename) + fileExtension;
+      const uniqueFilename = `${Date.now()}_${sanitizedFilename}`;
 
-      // อัปโหลดไฟล์ใหม่
-      const {  error: uploadError } = await supabase.storage
+      newFilePath = `old_projects/${uniqueFilename}`;
+
+      // ✅ อัปโหลดไฟล์ใหม่
+      const { error: uploadError } = await supabase.storage
         .from('upload')
         .upload(newFilePath, req.file.buffer, {
           contentType: 'application/pdf',
@@ -172,7 +174,7 @@ exports.updateOldProject = async (req, res) => {
         });
       }
 
-      // สร้าง URL ใหม่
+      // ✅ สร้าง URL ใหม่
       const { data: { publicUrl } } = supabase.storage
         .from('upload')
         .getPublicUrl(newFilePath);
@@ -181,7 +183,7 @@ exports.updateOldProject = async (req, res) => {
         throw new Error('ไม่สามารถสร้าง URL สาธารณะสำหรับไฟล์ได้');
       }
 
-      // ลบไฟล์เก่า ถ้ามี
+      // ✅ ลบไฟล์เก่าถ้ามี
       if (fileUrl) {
         try {
           const oldFilePath = new URL(fileUrl).pathname.split('/upload/')[1];
@@ -190,14 +192,13 @@ exports.updateOldProject = async (req, res) => {
             .remove([oldFilePath]);
         } catch (deleteError) {
           console.warn('⚠️ ไม่สามารถลบไฟล์เก่าได้:', deleteError.message);
-          // ดำเนินการต่อแม้จะลบไฟล์เก่าไม่ได้
         }
       }
 
       fileUrl = publicUrl;
     }
 
-    // อัปเดตข้อมูลในฐานข้อมูล
+    // ✅ อัปเดตข้อมูลในฐานข้อมูล
     const updateQuery = `
       UPDATE old_projects
       SET
@@ -243,6 +244,7 @@ exports.updateOldProject = async (req, res) => {
     });
   }
 };
+
 
 // ✅ ฟังก์ชันลบโครงงานเก่า
 exports.deleteOldProject = async (req, res) => {
