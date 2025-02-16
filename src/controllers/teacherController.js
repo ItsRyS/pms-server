@@ -104,63 +104,58 @@ exports.getTeacherById = async (req, res) => {
 
 // อัปเดตข้อมูลอาจารย์
 exports.updateTeacher = async (req, res) => {
-  const { id } = req.params;
-  const { teacher_name, teacher_phone, teacher_email, teacher_academic, teacher_expert } = req.body;
-
   try {
-    // 🔍 ดึงข้อมูลอาจารย์ปัจจุบันจากฐานข้อมูล
-    const [existingTeacher] = await db.query(
-      `SELECT teacher_image FROM teacher_info WHERE teacher_id = ?`, [id]
-    );
+      const { teacher_id } = req.params;
+      const { teacher_name, teacher_phone, teacher_email, teacher_academic, teacher_expert } = req.body;
+      const file = req.file; // รูปภาพที่อัปโหลด
 
-    if (existingTeacher.length === 0) {
-      return res.status(404).json({ error: 'Teacher not found' });
-    }
-
-    let imageUrl = existingTeacher[0].teacher_image; // เก็บ URL รูปเดิมไว้
-
-    if (req.file) {
-      // 🔥 ลบรูปเก่าถ้ามี
-      if (imageUrl) {
-        const storageUrl = 'https://tgyexptoqpnoxcalnkyo.supabase.co/storage/v1/object/public/upload/';
-        const filePath = imageUrl.replace(storageUrl, '');
-
-        await supabase.storage.from('upload').remove([filePath]);
+      // ✅ ตรวจสอบว่ามีข้อมูลอัปเดตหรือไม่
+      if (!teacher_name || !teacher_phone || !teacher_email || !teacher_academic || !teacher_expert) {
+          return res.status(400).json({ message: 'Missing required fields' });
       }
 
-      // ✅ อัปโหลดรูปใหม่ไปยัง Supabase
-      const fileExtension = path.extname(req.file.originalname);
-      const baseFilename = path.basename(req.file.originalname, fileExtension);
-      const sanitizedFilename = baseFilename.replace(/[^a-zA-Z0-9ก-๙._-]/gu, '_') + fileExtension;
-      const filePath = `profile-images/${Date.now()}_${sanitizedFilename}`;
+      let imageUrl = null;
 
-      const { data, error } = await supabase.storage
-        .from('upload')
-        .upload(filePath, req.file.buffer, {
-          contentType: req.file.mimetype,
-          upsert: false,
-        });
+      // ✅ ถ้ามีการอัปโหลดไฟล์ใหม่ ให้อัปโหลดไปที่ Supabase Storage
+      if (file) {
+          console.log("📤 Uploading file to Supabase...");
 
-      if (error) throw error;
-      console.log(`✅ File uploaded successfully:`, data);
-      imageUrl = supabase.storage.from('upload').getPublicUrl(filePath).publicUrl;
-    }
+          const fileExtension = path.extname(file.originalname);
+          const sanitizedFilename = `teacher_${Date.now()}${fileExtension}`;
+          const filePath = `profile-images/${sanitizedFilename}`;
 
-    // ✅ บันทึกข้อมูลอัปเดตลงฐานข้อมูล
-    await db.query(
-      `UPDATE teacher_info
-       SET teacher_name=?, teacher_phone=?, teacher_email=?, teacher_academic=?, teacher_expert=?, teacher_image=?
-       WHERE teacher_id = ?`,
-      [teacher_name, teacher_phone, teacher_email, teacher_academic, teacher_expert, imageUrl, id]
-    );
+          // 🔥 อัปโหลดไฟล์ไปยัง Supabase Storage
+          const { data, error } = await supabase.storage.from('upload').upload(filePath, file.buffer, { contentType: file.mimetype });
 
-    console.log(`✅ Updated teacher ${id} with image URL: ${imageUrl}`);
+          if (error) {
+              console.error("❌ Supabase Upload Error:", error.message);
+              return res.status(500).json({ message: 'Failed to upload image', error: error.message });
+          }
 
-    res.status(200).json({ message: 'Teacher updated successfully', imageUrl });
+          // ✅ URL สำหรับดึงรูปจาก Supabase
+          imageUrl = `https://your-supabase-url.storage/v1/object/public/upload/${data.path}`;
+          console.log(`✅ File uploaded successfully: ${imageUrl}`);
+      }
+
+      // 🔥 อัปเดตข้อมูลอาจารย์ในฐานข้อมูล MySQL
+      const updateQuery = `
+          UPDATE teacher_info
+          SET teacher_name = ?, teacher_phone = ?, teacher_email = ?,
+              teacher_academic = ?, teacher_expert = ?, teacher_image = COALESCE(?, teacher_image)
+          WHERE teacher_id = ?
+      `;
+
+      await db.query(updateQuery, [
+          teacher_name, teacher_phone, teacher_email,
+          teacher_academic, teacher_expert, imageUrl, teacher_id
+      ]);
+
+      console.log(`✅ Updated teacher ${teacher_id} with image URL: ${imageUrl || 'No new image'}`);
+      res.status(200).json({ message: "Teacher updated successfully" });
 
   } catch (error) {
-    console.error('❌ Error updating teacher:', error.message);
-    res.status(500).json({ error: 'Database update failed' });
+      console.error('❌ Error updating teacher:', error.message);
+      res.status(500).json({ message: 'Failed to update teacher', error: error.message });
   }
 };
 
