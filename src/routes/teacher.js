@@ -1,13 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const teacherController = require('../controllers/teacherController');
-
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage() });
 // Error wrapper function
-const asyncHandler = fn => (req, res, next) => {
+const asyncHandler = (fn) => (req, res, next) => {
   Promise.resolve(fn(req, res, next)).catch(next);
 };
 
 // Routes with error handling
+router.put('/:id', upload.single('teacher_image'), teacherController.updateTeacher);
 router.get('/:id', asyncHandler(teacherController.getTeacherById));
 router.post(
   '/',
@@ -28,8 +30,8 @@ router.use((err, req, res) => {
   res.status(err.status || 500).json({
     error: {
       message: err.message || 'Error processing teacher request',
-      status: err.status || 500
-    }
+      status: err.status || 500,
+    },
   });
 });
 

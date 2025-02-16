@@ -105,41 +105,61 @@ exports.getTeacherById = async (req, res) => {
 // อัปเดตข้อมูลอาจารย์
 exports.updateTeacher = async (req, res) => {
   const { id } = req.params;
-  const {
-    teacher_name,
-    teacher_phone,
-    teacher_email,
-    teacher_academic,
-    teacher_expert,
-  } = req.body;
-  const teacher_image = req.file ? req.file.filename : req.body.teacher_image;
+  const { teacher_name, teacher_phone, teacher_email, teacher_academic, teacher_expert } = req.body;
 
   try {
-    const [result] = await db.query(
-      `UPDATE teacher_info
-       SET teacher_name = ?, teacher_phone = ?, teacher_email = ?, teacher_academic = ?, teacher_expert = ?, teacher_image = ?
-       WHERE teacher_id = ?`,
-      [
-        teacher_name,
-        teacher_phone,
-        teacher_email,
-        teacher_academic,
-        teacher_expert,
-        teacher_image,
-        id,
-      ]
+    // ดึงข้อมูลอาจารย์ปัจจุบันจากฐานข้อมูล
+    const [existingTeacher] = await db.query(
+      `SELECT teacher_image FROM teacher_info WHERE teacher_id = ?`, [id]
     );
 
-    if (result.affectedRows === 0) {
+    if (existingTeacher.length === 0) {
       return res.status(404).json({ error: 'Teacher not found' });
     }
 
-    res.status(200).json({ message: 'Teacher updated successfully' });
+    let imageUrl = existingTeacher[0].teacher_image; // เก็บ URL รูปเดิมไว้
+
+    if (req.file) {
+      // 🔥 ลบรูปเก่าก่อน ถ้ามี
+      if (imageUrl) {
+        const storageUrl = 'https://tgyexptoqpnoxcalnkyo.supabase.co/storage/v1/object/public/upload/';
+        const filePath = imageUrl.replace(storageUrl, '');
+
+        await supabase.storage.from('upload').remove([filePath]);
+      }
+
+      // ✅ อัปโหลดรูปใหม่ไปยัง Supabase
+      const fileExtension = path.extname(req.file.originalname);
+      const baseFilename = path.basename(req.file.originalname, fileExtension);
+      const sanitizedFilename = baseFilename.replace(/[^a-zA-Z0-9ก-๙._-]/gu, '_') + fileExtension;
+      const filePath = `profile-images/${Date.now()}_${sanitizedFilename}`;
+
+      const {  error } = await supabase.storage
+        .from('upload')
+        .upload(filePath, req.file.buffer, {
+          contentType: req.file.mimetype,
+          upsert: false,
+        });
+
+      if (error) throw error;
+      imageUrl = supabase.storage.from('upload').getPublicUrl(filePath).publicUrl;
+    }
+
+    // ✅ อัปเดตข้อมูลอาจารย์ในฐานข้อมูล
+    await db.query(
+      `UPDATE teacher_info SET teacher_name=?, teacher_phone=?, teacher_email=?, teacher_academic=?, teacher_expert=?, teacher_image=?
+       WHERE teacher_id = ?`,
+      [teacher_name, teacher_phone, teacher_email, teacher_academic, teacher_expert, imageUrl, id]
+    );
+
+    res.status(200).json({ message: 'Teacher updated successfully', imageUrl });
+
   } catch (error) {
-    console.error('Error updating teacher:', error.message);
+    console.error('❌ Error updating teacher:', error.message);
     res.status(500).json({ error: 'Database update failed' });
   }
 };
+
 exports.deleteTeacher = async (req, res) => {
   const { id } = req.params;
 
