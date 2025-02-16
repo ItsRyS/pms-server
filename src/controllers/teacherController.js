@@ -1,10 +1,11 @@
-
+const path = require('path');
 const db = require('../config/db');
 const supabase = require('../config/supabaseClient');
 const multer = require('multer');
-const path = require('path');
-const upload = multer({ storage: multer.memoryStorage() }); // ใช้ memory storage เพื่อส่งไป Supabase
+
+const upload = multer({ storage: multer.memoryStorage() });
 exports.uploadMiddleware = upload.single('teacher_image');
+
 const sanitizeFilename = (filename) => {
   let cleanName = filename
     .normalize('NFC')
@@ -46,7 +47,13 @@ exports.getTeacherById = async (req, res) => {
 
 exports.createTeacher = async (req, res) => {
   try {
-    const { teacher_name, teacher_phone, teacher_email, teacher_academic, teacher_expert } = req.body;
+    const {
+      teacher_name,
+      teacher_phone,
+      teacher_email,
+      teacher_academic,
+      teacher_expert,
+    } = req.body;
 
     if (!teacher_name || !teacher_email) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -56,34 +63,45 @@ exports.createTeacher = async (req, res) => {
     if (req.file) {
       const fileExtension = path.extname(req.file.originalname);
       const baseFilename = path.basename(req.file.originalname, fileExtension);
-      const sanitizedFilename = sanitizeFilename(baseFilename) + fileExtension; // ✅ ทำให้ชื่อไฟล์ปลอดภัย
+      const sanitizedFilename =sanitizeFilename(baseFilename);
       const filePath = `profile-images/${Date.now()}_${sanitizedFilename}`;
 
       const { error } = await supabase.storage
         .from('upload')
         .upload(filePath, req.file.buffer, {
           contentType: req.file.mimetype,
-          upsert: false
+          upsert: false,
         });
 
       if (error) throw error;
-      imageUrl = supabase.storage.from('upload').getPublicUrl(filePath).publicUrl;
+      imageUrl = supabase.storage
+        .from('upload')
+        .getPublicUrl(filePath).publicUrl;
     }
 
     const [result] = await db.query(
       `INSERT INTO teacher_info (teacher_name, teacher_phone, teacher_email, teacher_academic, teacher_expert, teacher_image)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [teacher_name, teacher_phone, teacher_email, teacher_academic, teacher_expert, imageUrl]
+      [
+        teacher_name,
+        teacher_phone,
+        teacher_email,
+        teacher_academic,
+        teacher_expert,
+        imageUrl,
+      ]
     );
 
-    res.status(201).json({ message: 'Teacher created successfully', teacherId: result.insertId, imageUrl });
-
+    res.status(201).json({
+      message: 'Teacher created successfully',
+      teacherId: result.insertId,
+      imageUrl,
+    });
   } catch (error) {
     console.error('❌ Error creating teacher:', error.message);
     res.status(500).json({ error: 'Database insert failed' });
   }
 };
-
 
 // อัปเดตข้อมูลอาจารย์
 exports.updateTeacher = async (req, res) => {
@@ -138,19 +156,22 @@ exports.deleteTeacher = async (req, res) => {
 
     const fileUrl = results[0].teacher_image;
     if (fileUrl) {
-      const filePath = fileUrl.split('/').slice(4).join('/'); // แปลง URL เป็น path สำหรับ Supabase
+      const storageUrl =
+        'https://tgyexptoqpnoxcalnkyo.supabase.co/storage/v1/object/public/upload/';
+      const filePath = fileUrl.replace(storageUrl, '');
+
       console.log(`🗑️ Deleting file from Supabase: ${filePath}`);
 
-      const { error } = await supabase.storage.from('upload').remove([filePath]);
+      const { error } = await supabase.storage
+        .from('upload')
+        .remove([filePath]);
       if (error) console.error(`❌ Supabase Delete Error: ${error.message}`);
     }
 
     await db.query(`DELETE FROM teacher_info WHERE teacher_id = ?`, [id]);
     res.status(200).json({ message: 'Teacher deleted successfully' });
-
   } catch (error) {
     console.error('❌ Error deleting teacher:', error.message);
     res.status(500).json({ error: 'Database delete failed' });
   }
 };
-
