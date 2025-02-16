@@ -1,183 +1,153 @@
 const db = require('../config/db');
-const fs = require('fs');
+const supabase = require('../config/supabaseClient');
 const path = require('path');
-const { uploadOldProject } = require('../config/multer');
+const multer = require('multer');
 
-exports.uploadFile = uploadOldProject.single('file');
+// ✅ Middleware สำหรับอัปโหลดไฟล์
+const upload = multer({ storage: multer.memoryStorage() });
+exports.uploadMiddleware = upload.single('file');
 
-exports.addOldProject = async (req, res) => {
-  const { old_project_name_th, old_project_name_eng, project_type, document_year } = req.body;
-
-  // ตรวจสอบว่ามีไฟล์หรือไม่
+// ✅ ฟังก์ชันอัปโหลดไฟล์ไปยัง Supabase Storage
+exports.uploadFileToSupabase = async (req, res, next) => {
   if (!req.file) {
     return res.status(400).json({ message: 'File is required' });
   }
 
-  const filePath = `upload/old_projects/${req.file.filename}`;
+  try {
+    const fileExtension = path.extname(req.file.originalname);
+    const sanitizedFilename = `old_project_${Date.now()}${fileExtension}`;
+    const filePath = `old_projects/${sanitizedFilename}`;
+
+    // 🔥 อัปโหลดไฟล์ไปยัง Supabase Storage
+    const { data, error } = await supabase.storage
+      .from('upload')
+      .upload(filePath, req.file.buffer, { contentType: req.file.mimetype });
+
+    if (error) throw error;
+
+    req.fileUrl = `https://your-supabase-url.storage/v1/object/public/upload/${data.path}`;
+    console.log(`✅ File uploaded successfully: ${req.fileUrl}`);
+
+    next();
+  } catch (error) {
+    console.error('❌ Supabase Upload Error:', error.message);
+    res.status(500).json({ message: 'Upload failed', error: error.message });
+  }
+};
+
+// ✅ ฟังก์ชันเพิ่มโครงงานเก่า (บันทึก URL ของไฟล์ลง MySQL)
+exports.addOldProject = async (req, res) => {
+  const { old_project_name_th, old_project_name_eng, project_type, document_year } = req.body;
+
+  if (!req.fileUrl) {
+    return res.status(400).json({ message: 'File upload failed' });
+  }
 
   try {
     const query = `
       INSERT INTO old_projects (old_project_name_th, old_project_name_eng, project_type, document_year, file_path)
       VALUES (?, ?, ?, ?, ?)
     `;
-    const values = [old_project_name_th, old_project_name_eng, project_type, document_year, filePath];
+    await db.execute(query, [old_project_name_th, old_project_name_eng, project_type, document_year, req.fileUrl]);
 
-    await db.execute(query, values);
-    res.status(201).json({ message: 'Old project added successfully', filePath });
+    res.status(201).json({ message: 'Old project added successfully', filePath: req.fileUrl });
   } catch (error) {
-    console.error('Error inserting project:', error);
+    console.error('❌ Database Error:', error.message);
     res.status(500).json({ message: 'Database error' });
   }
 };
 
-// 📌 ดึงข้อมูลโครงงานเก่าทั้งหมด
+// ✅ ฟังก์ชันดึงโครงงานเก่าทั้งหมด
 exports.getOldProjects = async (req, res) => {
   try {
-    const [rows] = await db.execute('SELECT * FROM old_projects ORDER BY document_year DESC');
-    res.json(rows);
+    const [projects] = await db.execute('SELECT * FROM old_projects ORDER BY document_year DESC');
+
+    res.status(200).json(projects);
   } catch (error) {
-    console.error('Error fetching projects:', error);
-    res.status(500).json({ message: 'Database error' });
+    console.error('❌ Error fetching projects:', error.message);
+    res.status(500).json({ message: 'Database query failed' });
   }
 };
 
-// 📌 อัปเดตข้อมูลโครงงานเก่า (รองรับการเปลี่ยนไฟล์ใหม่)
+// ✅ ฟังก์ชันอัปเดตโครงงานเก่า
 exports.updateOldProject = async (req, res) => {
   const { id } = req.params;
-  const updateData = req.body;
-  let filePath = null;
-
-  if (req.file) {
-    filePath = `upload/old_projects/${req.file.filename}`;
-  }
+  const { old_project_name_th, old_project_name_eng, project_type, document_year } = req.body;
 
   try {
+    // 🔍 ดึงข้อมูลโครงงานปัจจุบันจากฐานข้อมูล
     const [existingProject] = await db.execute('SELECT file_path FROM old_projects WHERE old_id = ?', [id]);
 
     if (existingProject.length === 0) {
       return res.status(404).json({ message: 'Project not found' });
     }
 
-    const oldFilePath = existingProject[0].file_path;
+    let fileUrl = existingProject[0].file_path;
 
-    // ตรวจสอบว่ามีไฟล์ใหม่ถูกอัปโหลดหรือไม่
+    // ✅ ถ้ามีการอัปโหลดไฟล์ใหม่ ให้อัปโหลดไปยัง Supabase
     if (req.file) {
-      filePath = `upload/old_projects/${req.file.filename}`;
+      console.log("📤 Uploading new file to Supabase...");
 
-      // ลบไฟล์ PDF เก่า (ถ้ามี)
-      if (oldFilePath && fs.existsSync(path.join(__dirname, '..', '..', oldFilePath))) {
-        fs.unlinkSync(path.join(__dirname, '..', '..', oldFilePath));
+      const fileExtension = path.extname(req.file.originalname);
+      const sanitizedFilename = `old_project_${Date.now()}${fileExtension}`;
+      const filePath = `old_projects/${sanitizedFilename}`;
+
+      // 🔥 ลบไฟล์เก่าก่อน (ถ้ามี)
+      if (fileUrl) {
+        const filePathToDelete = fileUrl.split('/').slice(-1)[0];
+        await supabase.storage.from('upload').remove([`old_projects/${filePathToDelete}`]);
       }
-    }
-    const fields = [];
-    const values = [];
 
-    if (updateData.old_project_name_th !== undefined && updateData.old_project_name_th !== '') {
-      fields.push('old_project_name_th = ?');
-      values.push(updateData.old_project_name_th);
-    }
-    if (updateData.old_project_name_eng !== undefined && updateData.old_project_name_eng !== '') {
-      fields.push('old_project_name_eng = ?');
-      values.push(updateData.old_project_name_eng);
-    }
-    if (updateData.project_type !== undefined && updateData.project_type !== '') {
-      fields.push('project_type = ?');
-      values.push(updateData.project_type);
-    }
-    if (updateData.document_year !== undefined && updateData.document_year !== '') {
-      fields.push('document_year = ?');
-      values.push(updateData.document_year);
-    }
-    if (filePath) {
-      fields.push('file_path = ?');
-      values.push(filePath);
+      // 🔥 อัปโหลดไฟล์ใหม่
+      const { data, error } = await supabase.storage
+        .from('upload')
+        .upload(filePath, req.file.buffer, { contentType: req.file.mimetype });
+
+      if (error) throw error;
+
+      fileUrl = `https://your-supabase-url.storage/v1/object/public/upload/${data.path}`;
+      console.log(`✅ Updated file URL: ${fileUrl}`);
     }
 
-    if (fields.length === 0) {
-      return res.status(400).json({ message: 'No fields to update' });
-    }
+    // 🔥 อัปเดตฐานข้อมูล
+    await db.execute(
+      `UPDATE old_projects
+       SET old_project_name_th=?, old_project_name_eng=?, project_type=?, document_year=?, file_path=COALESCE(?, file_path)
+       WHERE old_id = ?`,
+      [old_project_name_th, old_project_name_eng, project_type, document_year, fileUrl, id]
+    );
 
-    const query = `UPDATE old_projects SET ${fields.join(', ')} WHERE old_id = ?`;
-    values.push(id);
+    res.status(200).json({ message: 'Old project updated successfully', filePath: fileUrl });
 
-    const [result] = await db.execute(query, values);
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ message: 'Project not found' });
-    }
-
-    res.json({ message: 'Project updated successfully' });
   } catch (error) {
-    console.error('Error updating project:', error);
-    res.status(500).json({ message: 'Database error' });
+    console.error('❌ Error updating project:', error.message);
+    res.status(500).json({ message: 'Database update failed' });
   }
 };
 
-// 📌 อัปเดตข้อมูลโครงงานเก่า (แก้ไขบางฟิลด์)
-exports.patchOldProject = async (req, res) => {
-  const { id } = req.params;
-  const updates = req.body;
-  let query = `UPDATE old_projects SET `;
-  const values = [];
-  const fields = [];
-
-  try {
-    Object.keys(updates).forEach((key) => {
-      if (updates[key] !== undefined) {
-        fields.push(`${key} = ?`);
-        values.push(updates[key]);
-      }
-    });
-
-    if (fields.length === 0) {
-      return res.status(400).json({ message: 'No fields to update' });
-    }
-
-    query += fields.join(', ') + ` WHERE old_id = ?`;
-    values.push(id);
-
-    const [result] = await db.execute(query, values);
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ message: 'Project not found' });
-    }
-
-    res.json({ message: 'Project updated successfully' });
-  } catch (error) {
-    console.error('Error updating project:', error);
-    res.status(500).json({ message: 'Database error' });
-  }
-};
-
-// 📌 ลบโครงงานเก่า
+// ✅ ฟังก์ชันลบโครงงานเก่าและไฟล์จาก Supabase
 exports.deleteOldProject = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const [existingProject] = await db.execute('SELECT file_path FROM old_projects WHERE old_id = ?', [id]);
+    const [project] = await db.execute('SELECT file_path FROM old_projects WHERE old_id = ?', [id]);
 
-    if (existingProject.length === 0) {
+    if (project.length === 0) {
       return res.status(404).json({ message: 'Project not found' });
     }
 
-    const filePath = existingProject[0].file_path;
+    const fileUrl = project[0].file_path;
+    const filePath = fileUrl.split('/').slice(-1)[0]; // ดึงชื่อไฟล์จาก URL
 
-    // ลบข้อมูลโครงงานจากฐานข้อมูล
-    const query = `DELETE FROM old_projects WHERE old_id = ?`;
-    const [result] = await db.execute(query, [id]);
+    // 🔥 ลบไฟล์จาก Supabase
+    await supabase.storage.from('upload').remove([`old_projects/${filePath}`]);
 
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ message: 'Project not found' });
-    }
+    // 🔥 ลบข้อมูลจากฐานข้อมูล
+    await db.execute('DELETE FROM old_projects WHERE old_id = ?', [id]);
 
-    // ลบไฟล์ PDF ถ้ามี
-    if (filePath && fs.existsSync(path.join(__dirname, '..', '..', filePath))) {
-      fs.unlinkSync(path.join(__dirname, '..', '..', filePath));
-    }
-
-    res.json({ message: 'Project and file deleted successfully' });
+    res.json({ message: 'Project deleted successfully' });
   } catch (error) {
-    console.error('Error deleting project:', error);
+    console.error('❌ Error deleting project:', error.message);
     res.status(500).json({ message: 'Database error' });
   }
 };
