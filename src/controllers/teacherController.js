@@ -16,16 +16,71 @@ const sanitizeFilename = (filename) => {
 
   return cleanName.length > 0 ? cleanName : 'file';
 };
+
+exports.createTeacher = async (req, res) => {
+  try {
+    const { teacher_name, teacher_phone, teacher_email, teacher_academic, teacher_expert } = req.body;
+
+    if (!teacher_name || !teacher_email) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    let imageUrl = null;
+    if (req.file) {
+      const fileExtension = path.extname(req.file.originalname);
+      const baseFilename = path.basename(req.file.originalname, fileExtension);
+      const sanitizedFilename = sanitizeFilename(baseFilename);
+      const filePath = `profile-images/${Date.now()}_${sanitizedFilename}`;
+
+      const { error } = await supabase.storage
+        .from('upload')
+        .upload(filePath, req.file.buffer, {
+          contentType: req.file.mimetype,
+          upsert: false,
+        });
+
+      if (error) throw error;
+
+      imageUrl = supabase.storage.from('upload').getPublicUrl(filePath).publicUrl;
+    }
+
+    // ✅ บันทึก URL ลงในฐานข้อมูล
+    const [result] = await db.query(
+      `INSERT INTO teacher_info (teacher_name, teacher_phone, teacher_email, teacher_academic, teacher_expert, teacher_image)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [teacher_name, teacher_phone, teacher_email, teacher_academic, teacher_expert, imageUrl]
+    );
+
+    res.status(201).json({
+      message: 'Teacher created successfully',
+      teacherId: result.insertId,
+      imageUrl,
+    });
+
+  } catch (error) {
+    console.error('❌ Error creating teacher:', error.message);
+    res.status(500).json({ error: 'Database insert failed' });
+  }
+};
+
 // ดึงข้อมูลอาจารย์ทั้งหมด
 exports.getAllTeachers = async (req, res) => {
   try {
     const [results] = await db.query('SELECT * FROM teacher_info');
-    res.status(200).json(results);
+
+    // ✅ ตรวจสอบว่าแต่ละรายการมี URL รูปภาพหรือไม่
+    const teachers = results.map(teacher => ({
+      ...teacher,
+      teacher_image: teacher.teacher_image || null, // ถ้าไม่มีรูปให้เป็น null
+    }));
+
+    res.status(200).json(teachers);
   } catch (error) {
     console.error('Error fetching teachers:', error.message);
     res.status(500).json({ error: 'Database query failed' });
   }
 };
+
 // ดึงข้อมูลอาจารย์ตาม ID
 exports.getTeacherById = async (req, res) => {
   const { id } = req.params;
@@ -45,63 +100,7 @@ exports.getTeacherById = async (req, res) => {
   }
 };
 
-exports.createTeacher = async (req, res) => {
-  try {
-    const {
-      teacher_name,
-      teacher_phone,
-      teacher_email,
-      teacher_academic,
-      teacher_expert,
-    } = req.body;
 
-    if (!teacher_name || !teacher_email) {
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
-
-    let imageUrl = null;
-    if (req.file) {
-      const fileExtension = path.extname(req.file.originalname);
-      const baseFilename = path.basename(req.file.originalname, fileExtension);
-      const sanitizedFilename =sanitizeFilename(baseFilename);
-      const filePath = `profile-images/${Date.now()}_${sanitizedFilename}`;
-
-      const { error } = await supabase.storage
-        .from('upload')
-        .upload(filePath, req.file.buffer, {
-          contentType: req.file.mimetype,
-          upsert: false,
-        });
-
-      if (error) throw error;
-      imageUrl = supabase.storage
-        .from('upload')
-        .getPublicUrl(filePath).publicUrl;
-    }
-
-    const [result] = await db.query(
-      `INSERT INTO teacher_info (teacher_name, teacher_phone, teacher_email, teacher_academic, teacher_expert, teacher_image)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [
-        teacher_name,
-        teacher_phone,
-        teacher_email,
-        teacher_academic,
-        teacher_expert,
-        imageUrl,
-      ]
-    );
-
-    res.status(201).json({
-      message: 'Teacher created successfully',
-      teacherId: result.insertId,
-      imageUrl,
-    });
-  } catch (error) {
-    console.error('❌ Error creating teacher:', error.message);
-    res.status(500).json({ error: 'Database insert failed' });
-  }
-};
 
 // อัปเดตข้อมูลอาจารย์
 exports.updateTeacher = async (req, res) => {
