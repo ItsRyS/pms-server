@@ -20,27 +20,25 @@ const sanitizeFilename = (filename) => {
 // ✅ ฟังก์ชันเพิ่มโครงงานเก่า
 exports.addOldProject = async (req, res) => {
   try {
-    let {
-      old_project_name_th,
-      old_project_name_eng,
-      project_type,
-      document_year,
-    } = req.body;
+    let { old_project_name_th, old_project_name_eng, project_type, document_year } = req.body;
+
+    // ✅ แปลงค่า `undefined` เป็น `null`
     old_project_name_th = old_project_name_th || null;
     old_project_name_eng = old_project_name_eng || null;
     project_type = project_type || null;
     document_year = document_year || null;
+
     if (!req.file) {
       return res.status(400).json({ message: 'File is required' });
     }
 
+    // ✅ แปลงชื่อไฟล์ให้ปลอดภัย
     const fileExtension = path.extname(req.file.originalname);
     const baseFilename = path.basename(req.file.originalname, fileExtension);
     const sanitizedFilename = sanitizeFilename(baseFilename) + fileExtension;
     const uniqueFilename = `${Date.now()}_${sanitizedFilename}`;
 
     const filePath = `old_projects/${uniqueFilename}`;
-
 
     // ✅ อัปโหลดไฟล์ไปยัง Supabase
     const { error } = await supabase.storage
@@ -49,35 +47,31 @@ exports.addOldProject = async (req, res) => {
 
     if (error) {
       console.error('❌ Supabase Upload Error:', error.message);
-      return res
-        .status(500)
-        .json({ message: 'Upload to Supabase failed', error: error.message });
+      return res.status(500).json({ message: 'Upload to Supabase failed', error: error.message });
     }
 
     // ✅ บันทึก URL ไฟล์ลงในฐานข้อมูล
-    const fileUrl = supabase.storage
-      .from('upload')
-      .getPublicUrl(filePath).publicUrl;
+    const fileUrl = supabase.storage.from('upload').getPublicUrl(filePath).publicUrl;
+
+    console.log(`✅ File uploaded successfully: ${fileUrl}`);
+
+    // ✅ ตรวจสอบค่าทุกตัวก่อน INSERT
+    console.log(`📝 Insert Data:`, { old_project_name_th, old_project_name_eng, project_type, document_year, fileUrl });
+
     const query = `
       INSERT INTO old_projects (old_project_name_th, old_project_name_eng, project_type, document_year, file_path)
       VALUES (?, ?, ?, ?, ?)
     `;
-    await db.execute(query, [
-      old_project_name_th,
-      old_project_name_eng,
-      project_type,
-      document_year,
-      fileUrl,
-    ]);
+    await db.execute(query, [old_project_name_th, old_project_name_eng, project_type, document_year, fileUrl]);
 
-    res
-      .status(201)
-      .json({ message: 'Old project added successfully', fileUrl });
+    res.status(201).json({ message: 'Old project added successfully', fileUrl });
+
   } catch (error) {
     console.error('❌ Error inserting project:', error.message);
     res.status(500).json({ message: 'Database error' });
   }
 };
+
 
 // ✅ ฟังก์ชันดึงข้อมูลโครงงานเก่าทั้งหมด
 exports.getOldProjects = async (req, res) => {
