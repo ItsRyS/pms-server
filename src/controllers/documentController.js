@@ -1,12 +1,14 @@
-const db = require("../config/db");
-const supabase = require("../config/supabaseClient");
-const path = require("path");
+const db = require('../config/db');
+const supabase = require('../config/supabaseClient');
+const path = require('path');
 
 const sanitizeFilename = (filename) => {
   return filename
-    .normalize("NFD") // แปลงอักขระ Unicode
-    .replace(/[\u0300-\u036f]/g, "") // ลบเครื่องหมายกำกับเสียง
-    .replace(/[^a-zA-Z0-9._-]/g, "_"); // แทนที่อักขระพิเศษเป็น "_"
+    .normalize('NFC') // ✅ แปลง Unicode ให้เป็นรูปแบบมาตรฐาน
+    .replace(/[\u0300-\u036f]/g, '') // ✅ ลบตัวกำกับเสียง (Accents)
+    .replace(/[^a-zA-Z0-9ก-๙._-]/g, '_') // ✅ อนุญาตภาษาไทย, a-z, 0-9, จุด (.), ขีด (-)
+    .replace(/_{2,}/g, '_') // ✅ ป้องกันไม่ให้เกิด `_` ซ้อนกันหลายตัว
+    .replace(/^_+|_+$/g, ''); // ✅ ลบ `_` ที่ขึ้นต้นและลงท้าย
 };
 
 // อัปโหลดเอกสารไปยัง Supabase Storage
@@ -16,36 +18,45 @@ exports.uploadDocument = async (req, res) => {
     const file = req.file;
 
     if (!file) {
-      return res.status(400).json({ message: "No file uploaded. Please attach a file." });
+      return res
+        .status(400)
+        .json({ message: 'No file uploaded. Please attach a file.' });
     }
     if (!doc_title || !doc_description || !uploaded_by) {
-      return res.status(400).json({ message: "All fields are required." });
+      return res.status(400).json({ message: 'All fields are required.' });
     }
 
-    console.log("📌 Debug: รับค่าจาก Client:", { doc_title, doc_description, uploaded_by });
+    console.log('📌 Debug: รับค่าจาก Client:', {
+      doc_title,
+      doc_description,
+      uploaded_by,
+    });
 
     // ✅ ดึงนามสกุลไฟล์ด้วย `path`
     const fileExtension = path.extname(file.originalname);
-    console.log("📌 File Extension:", fileExtension);
+    console.log('📌 File Extension:', fileExtension);
 
     // ✅ แปลงชื่อไฟล์ให้ปลอดภัยด้วย `sanitizeFilename`
     const baseFilename = path.basename(file.originalname, fileExtension);
     const sanitizedFilename = sanitizeFilename(baseFilename) + fileExtension;
     const filePath = `Document/${Date.now()}_${sanitizedFilename}`;
 
-    console.log("📌 Sanitized Filename:", sanitizedFilename);
+    console.log('📌 Original Filename:', file.originalname);
+    console.log('📌 Sanitized Filename:', sanitizedFilename);
 
     // ✅ อัปโหลดไฟล์ไปยัง Supabase
     const { error } = await supabase.storage
-      .from("upload")
+      .from('upload')
       .upload(filePath, file.buffer, { contentType: file.mimetype });
 
     if (error) {
-      console.error("❌ Supabase Upload Error:", error.message);
-      return res.status(500).json({ message: "Upload to Supabase failed", error: error.message });
+      console.error('❌ Supabase Upload Error:', error.message);
+      return res
+        .status(500)
+        .json({ message: 'Upload to Supabase failed', error: error.message });
     }
 
-    console.log("✅ Supabase Upload สำเร็จ:", filePath);
+    console.log('✅ Supabase Upload สำเร็จ:', filePath);
 
     // ✅ บันทึกลงฐานข้อมูล MySQL
     const [result] = await db.query(
@@ -54,12 +65,18 @@ exports.uploadDocument = async (req, res) => {
       [doc_title, doc_description, filePath, uploaded_by]
     );
 
-    console.log("✅ MySQL Insert สำเร็จ:", result);
+    console.log('✅ MySQL Insert สำเร็จ:', result);
 
-    res.status(200).json({ message: "File uploaded successfully", filePath, doc_id: result.insertId });
+    res
+      .status(200)
+      .json({
+        message: 'File uploaded successfully',
+        filePath,
+        doc_id: result.insertId,
+      });
   } catch (error) {
-    console.error("❌ Error uploading document:", error.message);
-    res.status(500).json({ message: "Upload failed", error: error.message });
+    console.error('❌ Error uploading document:', error.message);
+    res.status(500).json({ message: 'Upload failed', error: error.message });
   }
 };
 // ดึงข้อมูลเอกสารจากฐานข้อมูล
@@ -79,8 +96,10 @@ exports.getDocuments = async (req, res) => {
     `);
     res.status(200).json(results);
   } catch (error) {
-    console.error("Error fetching documents:", error.message);
-    res.status(500).json({ message: "Failed to retrieve documents", error: error.message });
+    console.error('Error fetching documents:', error.message);
+    res
+      .status(500)
+      .json({ message: 'Failed to retrieve documents', error: error.message });
   }
 };
 
@@ -89,23 +108,28 @@ exports.deleteDocument = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const [results] = await db.query(`SELECT doc_path FROM document_forms WHERE doc_id = ?`, [id]);
+    const [results] = await db.query(
+      `SELECT doc_path FROM document_forms WHERE doc_id = ?`,
+      [id]
+    );
     if (results.length === 0) {
-      return res.status(404).json({ message: "Document not found" });
+      return res.status(404).json({ message: 'Document not found' });
     }
 
     const fileUrl = results[0].doc_path;
-    const fileName = fileUrl.split("/").pop(); // ดึงชื่อไฟล์จาก URL
+    const fileName = fileUrl.split('/').pop(); // ดึงชื่อไฟล์จาก URL
 
     // 🔥 ลบไฟล์จาก Supabase
-    await supabase.storage.from("upload").remove([`Document/${fileName}`]);
+    await supabase.storage.from('upload').remove([`Document/${fileName}`]);
 
     // 🔥 ลบเอกสารจากฐานข้อมูล
     await db.query(`DELETE FROM document_forms WHERE doc_id = ?`, [id]);
 
-    res.status(200).json({ message: "Document deleted successfully" });
+    res.status(200).json({ message: 'Document deleted successfully' });
   } catch (error) {
-    console.error("Error deleting document:", error.message);
-    res.status(500).json({ message: "Failed to delete document", error: error.message });
+    console.error('Error deleting document:', error.message);
+    res
+      .status(500)
+      .json({ message: 'Failed to delete document', error: error.message });
   }
 };
