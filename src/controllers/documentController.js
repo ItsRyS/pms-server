@@ -1,5 +1,13 @@
 const db = require("../config/db");
 const supabase = require("../config/supabaseClient");
+const path = require("path");
+
+const sanitizeFilename = (filename) => {
+  return filename
+    .normalize("NFD") // แปลงอักขระ Unicode
+    .replace(/[\u0300-\u036f]/g, "") // ลบเครื่องหมายกำกับเสียง
+    .replace(/[^a-zA-Z0-9._-]/g, "_"); // แทนที่อักขระพิเศษเป็น "_"
+};
 
 // อัปโหลดเอกสารไปยัง Supabase Storage
 exports.uploadDocument = async (req, res) => {
@@ -14,8 +22,10 @@ exports.uploadDocument = async (req, res) => {
       return res.status(400).json({ message: "All fields are required." });
     }
 
-    const fileName = `${Date.now()}_${file.originalname}`;
-    const filePath = `Document/${fileName}`;
+    const fileExtension = path.extname(file.originalname);
+    const baseFilename = path.basename(file.originalname, fileExtension);
+    const sanitizedFilename = sanitizeFilename(baseFilename) + fileExtension;
+    const filePath = `Document/${Date.now()}_${sanitizedFilename}`;
 
     const { error } = await supabase.storage
       .from("upload")
@@ -38,9 +48,6 @@ exports.uploadDocument = async (req, res) => {
     res.status(500).json({ message: "Upload failed", error: error.message });
   }
 };
-
-
-
 // ดึงข้อมูลเอกสารจากฐานข้อมูล
 exports.getDocuments = async (req, res) => {
   try {
