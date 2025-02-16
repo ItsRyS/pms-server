@@ -22,29 +22,43 @@ exports.uploadDocument = async (req, res) => {
       return res.status(400).json({ message: "All fields are required." });
     }
 
+    console.log("📌 Debug: รับค่าจาก Client:", { doc_title, doc_description, uploaded_by });
+
+    // ✅ ดึงนามสกุลไฟล์ด้วย `path`
     const fileExtension = path.extname(file.originalname);
+    console.log("📌 File Extension:", fileExtension);
+
+    // ✅ แปลงชื่อไฟล์ให้ปลอดภัยด้วย `sanitizeFilename`
     const baseFilename = path.basename(file.originalname, fileExtension);
     const sanitizedFilename = sanitizeFilename(baseFilename) + fileExtension;
     const filePath = `Document/${Date.now()}_${sanitizedFilename}`;
 
+    console.log("📌 Sanitized Filename:", sanitizedFilename);
+
+    // ✅ อัปโหลดไฟล์ไปยัง Supabase
     const { error } = await supabase.storage
       .from("upload")
       .upload(filePath, file.buffer, { contentType: file.mimetype });
 
-    if (error) throw error;
+    if (error) {
+      console.error("❌ Supabase Upload Error:", error.message);
+      return res.status(500).json({ message: "Upload to Supabase failed", error: error.message });
+    }
 
-    const { data: fileUrlData } = supabase.storage.from("upload").getPublicUrl(filePath);
-    const fileUrl = fileUrlData.publicUrl;
+    console.log("✅ Supabase Upload สำเร็จ:", filePath);
 
+    // ✅ บันทึกลงฐานข้อมูล MySQL
     const [result] = await db.query(
       `INSERT INTO document_forms (doc_title, doc_description, doc_path, uploaded_by, upload_date)
-       VALUES (?, ?, ?, ?, ?)`,
-      [doc_title, doc_description, fileUrl, uploaded_by, new Date()]
+       VALUES (?, ?, ?, ?, NOW())`,
+      [doc_title, doc_description, filePath, uploaded_by]
     );
 
-    res.status(200).json({ message: "File uploaded successfully", fileUrl, doc_id: result.insertId });
+    console.log("✅ MySQL Insert สำเร็จ:", result);
+
+    res.status(200).json({ message: "File uploaded successfully", filePath, doc_id: result.insertId });
   } catch (error) {
-    console.error("Error uploading document:", error.message);
+    console.error("❌ Error uploading document:", error.message);
     res.status(500).json({ message: "Upload failed", error: error.message });
   }
 };
