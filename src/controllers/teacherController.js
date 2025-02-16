@@ -117,18 +117,24 @@ exports.getTeacherById = async (req, res) => {
 
 exports.updateTeacher = async (req, res) => {
   try {
-    const { teacher_id } = req.params;
+    const { id } = req.params; // เปลี่ยนจาก teacher_id เป็น id
     const { teacher_name, teacher_phone, teacher_email, teacher_academic, teacher_expert } = req.body;
     const file = req.file;
 
-    if (!teacher_name || !teacher_phone || !teacher_email || !teacher_academic || !teacher_expert) {
-      return res.status(400).json({ message: 'Missing required fields' });
+    // ตรวจสอบว่ามีข้อมูลอยู่จริงหรือไม่
+    const [existingTeacher] = await db.query(
+      'SELECT * FROM teacher_info WHERE teacher_id = ?',
+      [id]
+    );
+
+    if (existingTeacher.length === 0) {
+      return res.status(404).json({ message: 'Teacher not found' });
     }
 
     let imageUrl = null;
 
     if (file) {
-      console.log("📤 Uploading file to Supabase...");
+      console.log("📤 Uploading new file to Supabase...");
 
       const fileExtension = path.extname(file.originalname);
       const sanitizedFilename = `teacher_${Date.now()}${fileExtension}`;
@@ -158,39 +164,42 @@ exports.updateTeacher = async (req, res) => {
       console.log(`✅ File uploaded successfully: ${imageUrl}`);
     }
 
+    // อัพเดทข้อมูล
     const updateQuery = `
       UPDATE teacher_info
-      SET teacher_name = ?,
-          teacher_phone = ?,
-          teacher_email = ?,
-          teacher_academic = ?,
-          teacher_expert = ?,
-          teacher_image = COALESCE(?, teacher_image)
+      SET
+        teacher_name = ?,
+        teacher_phone = ?,
+        teacher_email = ?,
+        teacher_academic = ?,
+        teacher_expert = ?
+        ${imageUrl ? ', teacher_image = ?' : ''}
       WHERE teacher_id = ?
     `;
 
-    const [result] = await db.query(updateQuery, [
+    const updateValues = [
       teacher_name,
       teacher_phone,
       teacher_email,
       teacher_academic,
       teacher_expert,
-      imageUrl,
-      teacher_id
-    ]);
+      ...(imageUrl ? [imageUrl] : []),
+      id
+    ];
+
+    const [result] = await db.query(updateQuery, updateValues);
 
     if (result.affectedRows === 0) {
-      return res.status(404).json({ message: "Teacher not found" });
+      throw new Error('Update failed');
     }
 
-    console.log(`✅ Updated teacher ${teacher_id} with image URL: ${imageUrl || 'No new image'}`);
     res.status(200).json({
       message: "Teacher updated successfully",
-      imageUrl: imageUrl || null
+      imageUrl: imageUrl || existingTeacher[0].teacher_image
     });
 
   } catch (error) {
-    console.error('❌ Error updating teacher:', error.message);
+    console.error('❌ Error updating teacher:', error);
     res.status(500).json({
       message: 'Failed to update teacher',
       error: error.message

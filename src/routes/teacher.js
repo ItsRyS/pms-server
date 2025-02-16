@@ -1,30 +1,20 @@
 const express = require('express');
 const router = express.Router();
 const teacherController = require('../controllers/teacherController');
-const multer = require('multer');
-const upload = multer({ storage: multer.memoryStorage() });
+
+
 // Error wrapper function
 const asyncHandler = (fn) => (req, res, next) => {
   Promise.resolve(fn(req, res, next)).catch(next);
 };
 
-// Routes with error handling
-router.put('/:id', upload.single('teacher_image'), teacherController.updateTeacher);
-router.get('/:id', asyncHandler(teacherController.getTeacherById));
-router.post(
-  '/',
-  teacherController.uploadMiddleware,
-  asyncHandler(teacherController.createTeacher)
-);
-router.put(
-  '/:id',
-  teacherController.uploadMiddleware,
-  asyncHandler(teacherController.updateTeacher)
-);
-router.delete('/:id', asyncHandler(teacherController.deleteTeacher));
+// ลบ route ที่ซ้ำกันออก และจัดเรียงใหม่
 router.get('/', asyncHandler(teacherController.getAllTeachers));
+router.get('/:id', asyncHandler(teacherController.getTeacherById));
+router.post('/', teacherController.uploadMiddleware, asyncHandler(teacherController.createTeacher));
+router.put('/:id', teacherController.uploadMiddleware, asyncHandler(teacherController.updateTeacher));
+router.delete('/:id', asyncHandler(teacherController.deleteTeacher));
 
-// Add error handler specific to teacher routes
 router.use((err, req, res) => {
   console.error('Teacher Route Error:', err);
   res.status(err.status || 500).json({
