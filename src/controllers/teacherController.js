@@ -30,21 +30,32 @@ exports.createTeacher = async (req, res) => {
       const fileExtension = path.extname(req.file.originalname);
       const baseFilename = path.basename(req.file.originalname, fileExtension);
       const sanitizedFilename = sanitizeFilename(baseFilename);
-      const filePath = `profile-images/${Date.now()}_${sanitizedFilename}`;
+      const filePath = `profile-images/${Date.now()}_${sanitizedFilename}${fileExtension}`;
 
-      const { error } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('upload')
         .upload(filePath, req.file.buffer, {
           contentType: req.file.mimetype,
           upsert: false,
         });
 
-      if (error) throw error;
+      if (uploadError) {
+        console.error('❌ Upload Error:', uploadError);
+        throw uploadError;
+      }
 
-      imageUrl = supabase.storage.from('upload').getPublicUrl(filePath).publicUrl;
+      const { data: urlData } = supabase.storage
+        .from('upload')
+        .getPublicUrl(filePath);
+
+      if (!urlData?.publicUrl) {
+        throw new Error('Failed to get public URL for uploaded file');
+      }
+
+      imageUrl = urlData.publicUrl;
+      console.log('✅ Image uploaded successfully:', imageUrl);
     }
 
-    // ✅ บันทึก URL ลงในฐานข้อมูล
     const [result] = await db.query(
       `INSERT INTO teacher_info (teacher_name, teacher_phone, teacher_email, teacher_academic, teacher_expert, teacher_image)
        VALUES (?, ?, ?, ?, ?, ?)`,
@@ -59,29 +70,26 @@ exports.createTeacher = async (req, res) => {
 
   } catch (error) {
     console.error('❌ Error creating teacher:', error.message);
-    res.status(500).json({ error: 'Database insert failed' });
+    res.status(500).json({ error: 'Failed to create teacher: ' + error.message });
   }
 };
 
-// ดึงข้อมูลอาจารย์ทั้งหมด
 exports.getAllTeachers = async (req, res) => {
   try {
     const [results] = await db.query('SELECT * FROM teacher_info');
 
-    // ✅ ตรวจสอบว่าแต่ละรายการมี URL รูปภาพหรือไม่
     const teachers = results.map(teacher => ({
       ...teacher,
-      teacher_image: teacher.teacher_image || null, // ถ้าไม่มีรูปให้เป็น null
+      teacher_image: teacher.teacher_image || null,
     }));
 
     res.status(200).json(teachers);
   } catch (error) {
-    console.error('Error fetching teachers:', error.message);
+    console.error('❌ Error fetching teachers:', error.message);
     res.status(500).json({ error: 'Database query failed' });
   }
 };
 
-// ดึงข้อมูลอาจารย์ตาม ID
 exports.getTeacherById = async (req, res) => {
   const { id } = req.params;
 
@@ -90,75 +98,105 @@ exports.getTeacherById = async (req, res) => {
       'SELECT * FROM teacher_info WHERE teacher_id = ?',
       [id]
     );
+
     if (results.length === 0) {
       return res.status(404).json({ error: 'Teacher not found' });
     }
-    res.status(200).json(results[0]);
+
+    const teacher = {
+      ...results[0],
+      teacher_image: results[0].teacher_image || null,
+    };
+
+    res.status(200).json(teacher);
   } catch (error) {
-    console.error('Error fetching teacher:', error.message);
+    console.error('❌ Error fetching teacher:', error.message);
     res.status(500).json({ error: 'Database query failed' });
   }
 };
 
-
-
-// อัปเดตข้อมูลอาจารย์
 exports.updateTeacher = async (req, res) => {
   try {
-      const { teacher_id } = req.params;
-      const { teacher_name, teacher_phone, teacher_email, teacher_academic, teacher_expert } = req.body;
-      const file = req.file; // รูปภาพที่อัปโหลด
+    const { teacher_id } = req.params;
+    const { teacher_name, teacher_phone, teacher_email, teacher_academic, teacher_expert } = req.body;
+    const file = req.file;
 
-      // ✅ ตรวจสอบว่ามีข้อมูลอัปเดตหรือไม่
-      if (!teacher_name || !teacher_phone || !teacher_email || !teacher_academic || !teacher_expert) {
-          return res.status(400).json({ message: 'Missing required fields' });
+    if (!teacher_name || !teacher_phone || !teacher_email || !teacher_academic || !teacher_expert) {
+      return res.status(400).json({ message: 'Missing required fields' });
+    }
+
+    let imageUrl = null;
+
+    if (file) {
+      console.log("📤 Uploading file to Supabase...");
+
+      const fileExtension = path.extname(file.originalname);
+      const sanitizedFilename = `teacher_${Date.now()}${fileExtension}`;
+      const filePath = `profile-images/${sanitizedFilename}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('upload')
+        .upload(filePath, file.buffer, {
+          contentType: file.mimetype,
+          upsert: false
+        });
+
+      if (uploadError) {
+        console.error("❌ Supabase Upload Error:", uploadError.message);
+        throw uploadError;
       }
 
-      let imageUrl = null;
+      const { data: urlData } = supabase.storage
+        .from('upload')
+        .getPublicUrl(filePath);
 
-      // ✅ ถ้ามีการอัปโหลดไฟล์ใหม่ ให้อัปโหลดไปที่ Supabase Storage
-      if (file) {
-          console.log("📤 Uploading file to Supabase...");
-
-          const fileExtension = path.extname(file.originalname);
-          const sanitizedFilename = `teacher_${Date.now()}${fileExtension}`;
-          const filePath = `profile-images/${sanitizedFilename}`;
-
-          // 🔥 อัปโหลดไฟล์ไปยัง Supabase Storage
-          const { data, error } = await supabase.storage.from('upload').upload(filePath, file.buffer, { contentType: file.mimetype });
-
-          if (error) {
-              console.error("❌ Supabase Upload Error:", error.message);
-              return res.status(500).json({ message: 'Failed to upload image', error: error.message });
-          }
-
-          // ✅ URL สำหรับดึงรูปจาก Supabase
-          imageUrl = `https://tgyexptoqpnoxcalnkyo.supabase.co/storage/v1/object/public/upload/${data.path}`;
-          console.log(`✅ File uploaded successfully: ${imageUrl}`);
+      if (!urlData?.publicUrl) {
+        throw new Error('Failed to get public URL for uploaded file');
       }
 
-      // 🔥 อัปเดตข้อมูลอาจารย์ในฐานข้อมูล MySQL
-      const updateQuery = `
-          UPDATE teacher_info
-          SET teacher_name = ?, teacher_phone = ?, teacher_email = ?,
-              teacher_academic = ?, teacher_expert = ?, teacher_image = COALESCE(?, teacher_image)
-          WHERE teacher_id = ?
-      `;
+      imageUrl = urlData.publicUrl;
+      console.log(`✅ File uploaded successfully: ${imageUrl}`);
+    }
 
-      await db.query(updateQuery, [
-          teacher_name, teacher_phone, teacher_email,
-          teacher_academic, teacher_expert, imageUrl, teacher_id
-      ]);
+    const updateQuery = `
+      UPDATE teacher_info
+      SET teacher_name = ?,
+          teacher_phone = ?,
+          teacher_email = ?,
+          teacher_academic = ?,
+          teacher_expert = ?,
+          teacher_image = COALESCE(?, teacher_image)
+      WHERE teacher_id = ?
+    `;
 
-      console.log(`✅ Updated teacher ${teacher_id} with image URL: ${imageUrl || 'No new image'}`);
-      res.status(200).json({ message: "Teacher updated successfully" });
+    const [result] = await db.query(updateQuery, [
+      teacher_name,
+      teacher_phone,
+      teacher_email,
+      teacher_academic,
+      teacher_expert,
+      imageUrl,
+      teacher_id
+    ]);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Teacher not found" });
+    }
+
+    console.log(`✅ Updated teacher ${teacher_id} with image URL: ${imageUrl || 'No new image'}`);
+    res.status(200).json({
+      message: "Teacher updated successfully",
+      imageUrl: imageUrl || null
+    });
 
   } catch (error) {
-      console.error('❌ Error updating teacher:', error.message);
-      res.status(500).json({ message: 'Failed to update teacher', error: error.message });
+    console.error('❌ Error updating teacher:', error.message);
+    res.status(500).json({
+      message: 'Failed to update teacher',
+      error: error.message
+    });
   }
 };
-
 
 exports.deleteTeacher = async (req, res) => {
   const { id } = req.params;
@@ -175,22 +213,36 @@ exports.deleteTeacher = async (req, res) => {
 
     const fileUrl = results[0].teacher_image;
     if (fileUrl) {
-      const storageUrl =
-        'https://tgyexptoqpnoxcalnkyo.supabase.co/storage/v1/object/public/upload/';
+      const storageUrl = 'https://tgyexptoqpnoxcalnkyo.supabase.co/storage/v1/object/public/upload/';
       const filePath = fileUrl.replace(storageUrl, '');
 
       console.log(`🗑️ Deleting file from Supabase: ${filePath}`);
 
-      const { error } = await supabase.storage
+      const { error: deleteError } = await supabase.storage
         .from('upload')
         .remove([filePath]);
-      if (error) console.error(`❌ Supabase Delete Error: ${error.message}`);
+
+      if (deleteError) {
+        console.error(`❌ Supabase Delete Error: ${deleteError.message}`);
+        throw deleteError;
+      }
     }
 
-    await db.query(`DELETE FROM teacher_info WHERE teacher_id = ?`, [id]);
+    const [deleteResult] = await db.query(
+      `DELETE FROM teacher_info WHERE teacher_id = ?`,
+      [id]
+    );
+
+    if (deleteResult.affectedRows === 0) {
+      return res.status(404).json({ error: 'Teacher not found' });
+    }
+
     res.status(200).json({ message: 'Teacher deleted successfully' });
   } catch (error) {
     console.error('❌ Error deleting teacher:', error.message);
-    res.status(500).json({ error: 'Database delete failed' });
+    res.status(500).json({
+      error: 'Failed to delete teacher',
+      message: error.message
+    });
   }
 };
