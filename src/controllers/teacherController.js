@@ -108,7 +108,7 @@ exports.updateTeacher = async (req, res) => {
   const { teacher_name, teacher_phone, teacher_email, teacher_academic, teacher_expert } = req.body;
 
   try {
-    // ดึงข้อมูลอาจารย์ปัจจุบันจากฐานข้อมูล
+    // 🔍 ดึงข้อมูลอาจารย์ปัจจุบันจากฐานข้อมูล
     const [existingTeacher] = await db.query(
       `SELECT teacher_image FROM teacher_info WHERE teacher_id = ?`, [id]
     );
@@ -120,7 +120,7 @@ exports.updateTeacher = async (req, res) => {
     let imageUrl = existingTeacher[0].teacher_image; // เก็บ URL รูปเดิมไว้
 
     if (req.file) {
-      // 🔥 ลบรูปเก่าก่อน ถ้ามี
+      // 🔥 ลบรูปเก่าถ้ามี
       if (imageUrl) {
         const storageUrl = 'https://tgyexptoqpnoxcalnkyo.supabase.co/storage/v1/object/public/upload/';
         const filePath = imageUrl.replace(storageUrl, '');
@@ -134,7 +134,7 @@ exports.updateTeacher = async (req, res) => {
       const sanitizedFilename = baseFilename.replace(/[^a-zA-Z0-9ก-๙._-]/gu, '_') + fileExtension;
       const filePath = `profile-images/${Date.now()}_${sanitizedFilename}`;
 
-      const {  error } = await supabase.storage
+      const { data, error } = await supabase.storage
         .from('upload')
         .upload(filePath, req.file.buffer, {
           contentType: req.file.mimetype,
@@ -142,15 +142,19 @@ exports.updateTeacher = async (req, res) => {
         });
 
       if (error) throw error;
+      console.log(`✅ File uploaded successfully:`, data);
       imageUrl = supabase.storage.from('upload').getPublicUrl(filePath).publicUrl;
     }
 
-    // ✅ อัปเดตข้อมูลอาจารย์ในฐานข้อมูล
+    // ✅ บันทึกข้อมูลอัปเดตลงฐานข้อมูล
     await db.query(
-      `UPDATE teacher_info SET teacher_name=?, teacher_phone=?, teacher_email=?, teacher_academic=?, teacher_expert=?, teacher_image=?
+      `UPDATE teacher_info
+       SET teacher_name=?, teacher_phone=?, teacher_email=?, teacher_academic=?, teacher_expert=?, teacher_image=?
        WHERE teacher_id = ?`,
       [teacher_name, teacher_phone, teacher_email, teacher_academic, teacher_expert, imageUrl, id]
     );
+
+    console.log(`✅ Updated teacher ${id} with image URL: ${imageUrl}`);
 
     res.status(200).json({ message: 'Teacher updated successfully', imageUrl });
 
@@ -159,6 +163,7 @@ exports.updateTeacher = async (req, res) => {
     res.status(500).json({ error: 'Database update failed' });
   }
 };
+
 
 exports.deleteTeacher = async (req, res) => {
   const { id } = req.params;
