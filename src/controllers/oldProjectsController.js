@@ -125,6 +125,8 @@ exports.getOldProjects = async (req, res) => {
 
 // ✅ ฟังก์ชันอัปเดตโครงงานเก่า
 exports.updateOldProject = async (req, res) => {
+  let newFilePath = null;
+
   try {
     const { id } = req.params;
     const {
@@ -134,68 +136,111 @@ exports.updateOldProject = async (req, res) => {
       document_year,
     } = req.body;
 
-    // 🔍 ดึงข้อมูลโครงงานเก่าจากฐานข้อมูล
+    // ดึงข้อมูลโครงงานเก่า
     const [existingProject] = await db.query(
       'SELECT file_path FROM old_projects WHERE old_id = ?',
       [id]
     );
 
     if (existingProject.length === 0) {
-      return res.status(404).json({ message: 'Old project not found' });
+      return res.status(404).json({ message: 'ไม่พบโครงงานที่ต้องการแก้ไข' });
     }
 
     let fileUrl = existingProject[0].file_path;
 
-    // ✅ ถ้ามีการอัปโหลดไฟล์ใหม่
+    // ถ้ามีการอัปโหลดไฟล์ใหม่
     if (req.file) {
-      // 🔥 ลบไฟล์เก่าจาก Supabase
-      if (fileUrl) {
-        const storageUrl =
-          'https://your-supabase-url.com/storage/v1/object/public/upload/';
-        const filePath = fileUrl.replace(storageUrl, '');
+      // สร้างชื่อไฟล์ใหม่
+      const timestamp = Date.now();
+      const safeFilename = Buffer.from(req.file.originalname, 'latin1').toString('utf8')
+        .replace(/[^a-zA-Z0-9ก-๙.-]/g, '_');
+      newFilePath = `old_projects/${timestamp}_${safeFilename}`;
 
-        await supabase.storage.from('upload').remove([filePath]);
-      }
-
-      // ✅ อัปโหลดไฟล์ใหม่ไปยัง Supabase
-      const newFilePath = `old_projects/${Date.now()}_${req.file.originalname}`;
-      const { error } = await supabase.storage
+      // อัปโหลดไฟล์ใหม่
+      const {  error: uploadError } = await supabase.storage
         .from('upload')
         .upload(newFilePath, req.file.buffer, {
           contentType: 'application/pdf',
+          upsert: false
         });
 
-      if (error) {
-        console.error('❌ Supabase Upload Error:', error.message);
-        return res.status(500).json({ message: 'Upload to Supabase failed' });
+      if (uploadError) {
+        console.error('❌ ข้อผิดพลาดในการอัปโหลด:', uploadError.message);
+        return res.status(500).json({
+          message: 'เกิดข้อผิดพลาดในการอัปโหลดไฟล์',
+          error: uploadError.message
+        });
       }
 
-      fileUrl = supabase.storage
+      // สร้าง URL ใหม่
+      const { data: { publicUrl } } = supabase.storage
         .from('upload')
-        .getPublicUrl(newFilePath).publicUrl;
+        .getPublicUrl(newFilePath);
+
+      if (!publicUrl) {
+        throw new Error('ไม่สามารถสร้าง URL สาธารณะสำหรับไฟล์ได้');
+      }
+
+      // ลบไฟล์เก่า ถ้ามี
+      if (fileUrl) {
+        try {
+          const oldFilePath = new URL(fileUrl).pathname.split('/upload/')[1];
+          await supabase.storage
+            .from('upload')
+            .remove([oldFilePath]);
+        } catch (deleteError) {
+          console.warn('⚠️ ไม่สามารถลบไฟล์เก่าได้:', deleteError.message);
+          // ดำเนินการต่อแม้จะลบไฟล์เก่าไม่ได้
+        }
+      }
+
+      fileUrl = publicUrl;
     }
 
-    // ✅ อัปเดตข้อมูลโครงงานเก่าในฐานข้อมูล
+    // อัปเดตข้อมูลในฐานข้อมูล
     const updateQuery = `
       UPDATE old_projects
-      SET old_project_name_th = ?, old_project_name_eng = ?, project_type = ?, document_year = ?, file_path = ?
+      SET
+        old_project_name_th = ?,
+        old_project_name_eng = ?,
+        project_type = ?,
+        document_year = ?,
+        file_path = ?
       WHERE old_id = ?
     `;
+
     await db.execute(updateQuery, [
-      old_project_name_th,
-      old_project_name_eng,
-      project_type,
-      document_year,
+      old_project_name_th || null,
+      old_project_name_eng || null,
+      project_type || null,
+      document_year || null,
       fileUrl,
-      id,
+      id
     ]);
 
-    res
-      .status(200)
-      .json({ message: 'Old project updated successfully', fileUrl });
+    res.status(200).json({
+      message: 'อัปเดตโครงงานสำเร็จ',
+      fileUrl: fileUrl
+    });
+
   } catch (error) {
-    console.error('❌ Error updating old project:', error.message);
-    res.status(500).json({ message: 'Database update failed' });
+    console.error('❌ ข้อผิดพลาดในการอัปเดตโครงงาน:', error.message);
+
+    // ถ้าเกิดข้อผิดพลาดและมีการอัปโหลดไฟล์ใหม่ ให้ลบไฟล์ที่เพิ่งอัปโหลด
+    if (newFilePath) {
+      try {
+        await supabase.storage
+          .from('upload')
+          .remove([newFilePath]);
+      } catch (deleteError) {
+        console.error('❌ ไม่สามารถลบไฟล์ที่อัปโหลดได้:', deleteError.message);
+      }
+    }
+
+    res.status(500).json({
+      message: 'เกิดข้อผิดพลาดในการอัปเดตข้อมูล',
+      error: error.message
+    });
   }
 };
 
