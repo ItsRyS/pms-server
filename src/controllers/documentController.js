@@ -113,15 +113,34 @@ exports.deleteDocument = async (req, res) => {
     }
 
     const fileUrl = results[0].doc_path;
-    const filePath = fileUrl.split('/').slice(1).join('/'); // แปลง URL เป็น path สำหรับ Supabase
+    const storageUrl = 'https://tgyexptoqpnoxcalnkyo.supabase.co/storage/v1/object/public/upload/';
+    const filePath = fileUrl.replace(storageUrl, '');
 
-    console.log(`🔍 Checking file existence in Supabase: ${filePath}`);
+    console.log(`🗑️ Trying to delete file from Supabase: ${filePath}`);
 
-    // 🔥 ใช้ Promise.all() เพื่อลบไฟล์และข้อมูลพร้อมกัน
-    await Promise.all([
-      supabase.storage.from('upload').remove([filePath]),
-      db.query(`DELETE FROM document_forms WHERE doc_id = ?`, [id])
-    ]);
+    // ตรวจสอบว่าไฟล์มีอยู่จริง
+    const { data: fileList, error: listError } = await supabase.storage.from('upload').list(filePath);
+    if (listError) {
+      console.error('❌ Supabase List Error:', listError.message);
+      return res.status(500).json({ message: 'Failed to check file existence in Supabase', error: listError.message });
+    }
+
+    if (!fileList || fileList.length === 0) {
+      console.warn(`⚠️ File not found in Supabase: ${filePath}`);
+    }
+
+    // ลบไฟล์จาก Supabase
+    const { error: deleteError } = await supabase.storage.from('upload').remove([filePath]);
+
+    if (deleteError) {
+      console.error('❌ Supabase Delete Error:', deleteError.message);
+      return res.status(500).json({ message: 'Failed to delete file from storage', error: deleteError.message });
+    }
+
+    console.log(`✅ Successfully deleted file from Supabase: ${filePath}`);
+
+    // ลบข้อมูลจาก MySQL
+    await db.query(`DELETE FROM document_forms WHERE doc_id = ?`, [id]);
 
     res.status(200).json({ message: 'Document deleted successfully' });
 
