@@ -133,7 +133,7 @@ exports.updateTeacher = async (req, res) => {
           }
 
           // ✅ URL สำหรับดึงรูปจาก Supabase
-          imageUrl = `https://your-supabase-url.storage/v1/object/public/upload/${data.path}`;
+          imageUrl = `https://tgyexptoqpnoxcalnkyo.supabase.co/storage/v1/object/public/upload/${data.path}`;
           console.log(`✅ File uploaded successfully: ${imageUrl}`);
       }
 
