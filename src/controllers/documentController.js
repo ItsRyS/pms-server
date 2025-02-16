@@ -117,8 +117,8 @@ exports.deleteDocument = async (req, res) => {
     const doc = documents[0];
 
     // แปลง URL เป็น path ที่ใช้ใน Supabase
-    const fileUrl = new URL(doc.doc_path);
-    const filePath = fileUrl.pathname.split('/').slice(2).join('/');
+    const storageUrl = 'https://tgyexptoqpnoxcalnkyo.supabase.co/storage/v1/object/public/upload/';
+    const filePath = doc.doc_path.replace(storageUrl, '');
 
     // ลบไฟล์จาก Supabase Storage
     const { error: deleteError } = await supabase.storage
@@ -127,7 +127,8 @@ exports.deleteDocument = async (req, res) => {
 
     if (deleteError) {
       console.error('Supabase Delete Error:', deleteError);
-      return res.status(500).json({ message: 'Failed to delete from storage', error: deleteError.message });
+      // ถ้าลบไฟล์ไม่สำเร็จ ยังคงดำเนินการลบข้อมูลในฐานข้อมูลต่อ
+      console.warn('Failed to delete file from storage, proceeding with database deletion');
     }
 
     // ลบข้อมูลจากฐานข้อมูล
