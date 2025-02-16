@@ -2,10 +2,19 @@
 const db = require('../config/db');
 const supabase = require('../config/supabaseClient');
 const multer = require('multer');
-
+const path = require('path');
 const upload = multer({ storage: multer.memoryStorage() }); // ใช้ memory storage เพื่อส่งไป Supabase
 exports.uploadMiddleware = upload.single('teacher_image');
+const sanitizeFilename = (filename) => {
+  let cleanName = filename
+    .normalize('NFC')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9ก-๙._-]/g, '_')
+    .replace(/_{2,}/g, '_')
+    .replace(/^_+|_+$/g, '');
 
+  return cleanName.length > 0 ? cleanName : 'file';
+};
 // ดึงข้อมูลอาจารย์ทั้งหมด
 exports.getAllTeachers = async (req, res) => {
   try {
@@ -35,7 +44,6 @@ exports.getTeacherById = async (req, res) => {
   }
 };
 
-// สร้างข้อมูลอาจารย์ใหม่
 exports.createTeacher = async (req, res) => {
   try {
     const { teacher_name, teacher_phone, teacher_email, teacher_academic, teacher_expert } = req.body;
@@ -46,16 +54,20 @@ exports.createTeacher = async (req, res) => {
 
     let imageUrl = null;
     if (req.file) {
-      const fileName = `${Date.now()}_${req.file.originalname}`;
-      const {  error } = await supabase.storage
+      const fileExtension = path.extname(req.file.originalname);
+      const baseFilename = path.basename(req.file.originalname, fileExtension);
+      const sanitizedFilename = sanitizeFilename(baseFilename) + fileExtension; // ✅ ทำให้ชื่อไฟล์ปลอดภัย
+      const filePath = `profile-images/${Date.now()}_${sanitizedFilename}`;
+
+      const { error } = await supabase.storage
         .from('upload')
-        .upload(`profile-images/${fileName}`, req.file.buffer, {
+        .upload(filePath, req.file.buffer, {
           contentType: req.file.mimetype,
           upsert: false
         });
 
       if (error) throw error;
-      imageUrl = supabase.storage.from('upload').getPublicUrl(`profile-images/${fileName}`).publicUrl;
+      imageUrl = supabase.storage.from('upload').getPublicUrl(filePath).publicUrl;
     }
 
     const [result] = await db.query(
@@ -71,6 +83,7 @@ exports.createTeacher = async (req, res) => {
     res.status(500).json({ error: 'Database insert failed' });
   }
 };
+
 
 // อัปเดตข้อมูลอาจารย์
 exports.updateTeacher = async (req, res) => {
