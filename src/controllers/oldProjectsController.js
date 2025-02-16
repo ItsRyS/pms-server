@@ -3,9 +3,9 @@ const supabase = require('../config/supabaseClient');
 const path = require('path');
 const multer = require('multer');
 
-// ✅ Middleware สำหรับอัปโหลดไฟล์
 const upload = multer({ storage: multer.memoryStorage() });
 exports.uploadMiddleware = upload.single('file');
+
 const sanitizeFilename = (filename) => {
   let cleanName = filename
     .normalize('NFC')
@@ -17,58 +17,95 @@ const sanitizeFilename = (filename) => {
   return cleanName.length > 0 ? cleanName : 'file';
 };
 
-// ✅ ฟังก์ชันเพิ่มโครงงานเก่า
 exports.addOldProject = async (req, res) => {
+  let filePath;
   try {
     let { old_project_name_th, old_project_name_eng, project_type, document_year } = req.body;
 
-    // ✅ แปลงค่า `undefined` เป็น `null`
+    // แปลงค่า undefined เป็น null
     old_project_name_th = old_project_name_th || null;
     old_project_name_eng = old_project_name_eng || null;
     project_type = project_type || null;
     document_year = document_year || null;
 
     if (!req.file) {
-      return res.status(400).json({ message: 'File is required' });
+      return res.status(400).json({ message: 'กรุณาอัปโหลดไฟล์' });
     }
 
-    // ✅ แปลงชื่อไฟล์ให้ปลอดภัย
+    // แปลงชื่อไฟล์ให้ปลอดภัย
     const fileExtension = path.extname(req.file.originalname);
     const baseFilename = path.basename(req.file.originalname, fileExtension);
     const sanitizedFilename = sanitizeFilename(baseFilename) + fileExtension;
     const uniqueFilename = `${Date.now()}_${sanitizedFilename}`;
-
     const filePath = `old_projects/${uniqueFilename}`;
 
-    // ✅ อัปโหลดไฟล์ไปยัง Supabase
-    const { error } = await supabase.storage
+    // อัปโหลดไฟล์ไปยัง Supabase
+    const {  error: uploadError } = await supabase.storage
       .from('upload')
       .upload(filePath, req.file.buffer, { contentType: 'application/pdf' });
 
-    if (error) {
-      console.error('❌ Supabase Upload Error:', error.message);
-      return res.status(500).json({ message: 'Upload to Supabase failed', error: error.message });
+    if (uploadError) {
+      console.error('❌ ข้อผิดพลาดในการอัปโหลด Supabase:', uploadError.message);
+      return res.status(500).json({
+        message: 'เกิดข้อผิดพลาดในการอัปโหลดไฟล์',
+        error: uploadError.message
+      });
     }
 
-    // ✅ บันทึก URL ไฟล์ลงในฐานข้อมูล
-    const fileUrl = supabase.storage.from('upload').getPublicUrl(filePath).publicUrl;
+    // สร้าง URL สำหรับไฟล์ที่อัปโหลด
+    const { data: { publicUrl } } = supabase.storage
+      .from('upload')
+      .getPublicUrl(filePath);
 
-    console.log(`✅ File uploaded successfully: ${fileUrl}`);
+    if (!publicUrl) {
+      throw new Error('ไม่สามารถสร้าง URL สาธารณะสำหรับไฟล์ได้');
+    }
 
-    // ✅ ตรวจสอบค่าทุกตัวก่อน INSERT
-    console.log(`📝 Insert Data:`, { old_project_name_th, old_project_name_eng, project_type, document_year, fileUrl });
+    console.log(`✅ อัปโหลดไฟล์สำเร็จ: ${publicUrl}`);
+
+    // ตรวจสอบข้อมูลก่อนบันทึก
+    console.log('📝 ข้อมูลที่จะบันทึก:', {
+      old_project_name_th,
+      old_project_name_eng,
+      project_type,
+      document_year,
+      fileUrl: publicUrl
+    });
 
     const query = `
       INSERT INTO old_projects (old_project_name_th, old_project_name_eng, project_type, document_year, file_path)
       VALUES (?, ?, ?, ?, ?)
     `;
-    await db.execute(query, [old_project_name_th, old_project_name_eng, project_type, document_year, fileUrl]);
 
-    res.status(201).json({ message: 'Old project added successfully', fileUrl });
+    await db.execute(query, [
+      old_project_name_th,
+      old_project_name_eng,
+      project_type,
+      document_year,
+      publicUrl
+    ]);
+
+    res.status(201).json({
+      message: 'เพิ่มโครงงานเก่าสำเร็จ',
+      fileUrl: publicUrl
+    });
 
   } catch (error) {
-    console.error('❌ Error inserting project:', error.message);
-    res.status(500).json({ message: 'Database error' });
+    console.error('❌ ข้อผิดพลาดในการบันทึกโครงงาน:', error.message);
+
+    // ถ้าเกิดข้อผิดพลาด ให้พยายามลบไฟล์ที่อัปโหลดไปแล้ว
+    if (filePath) {
+      try {
+        await supabase.storage.from('upload').remove([filePath]);
+      } catch (deleteError) {
+        console.error('❌ ไม่สามารถลบไฟล์ที่อัปโหลดได้:', deleteError.message);
+      }
+    }
+
+    res.status(500).json({
+      message: 'เกิดข้อผิดพลาดในการบันทึกข้อมูล',
+      error: error.message
+    });
   }
 };
 
