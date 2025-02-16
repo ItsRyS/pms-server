@@ -1,11 +1,18 @@
 const db = require('../config/db');
 const supabase = require('../config/supabaseClient');
-
+const path = require('path');
 const multer = require('multer');
 
 // ✅ Middleware สำหรับอัปโหลดไฟล์
 const upload = multer({ storage: multer.memoryStorage() });
 exports.uploadMiddleware = upload.single('file');
+const sanitizeFilename = (filename) => {
+  return filename
+    .normalize('NFC') // ✅ แก้ปัญหา Unicode Encoding
+    .replace(/[^\p{L}\p{N}._-]/gu, '_') // ✅ อนุญาตเฉพาะอักษร, ตัวเลข, `_`, `.`, `-`
+    .replace(/_{2,}/g, '_') // ✅ ป้องกัน `_` ซ้อนกันหลายตัว
+    .replace(/^_+|_+$/g, ''); // ✅ ลบ `_` ที่ขึ้นต้นและลงท้าย
+};
 
 // ✅ ฟังก์ชันเพิ่มโครงงานเก่า
 exports.addOldProject = async (req, res) => {
@@ -16,18 +23,23 @@ exports.addOldProject = async (req, res) => {
       return res.status(400).json({ message: 'File is required' });
     }
 
+    // ✅ แปลงชื่อไฟล์ให้ปลอดภัย
+    const fileExtension = path.extname(req.file.originalname);
+    const baseFilename = path.basename(req.file.originalname, fileExtension);
+    const sanitizedFilename = sanitizeFilename(baseFilename) + fileExtension;
+    const filePath = `old_projects/${Date.now()}_${sanitizedFilename}`;
+
     // ✅ อัปโหลดไฟล์ไปยัง Supabase
-    const filePath = `old_projects/${Date.now()}_${req.file.originalname}`;
-    const {error } = await supabase.storage
+    const { error } = await supabase.storage
       .from('upload')
       .upload(filePath, req.file.buffer, { contentType: 'application/pdf' });
 
     if (error) {
       console.error('❌ Supabase Upload Error:', error.message);
-      return res.status(500).json({ message: 'Upload to Supabase failed' });
+      return res.status(500).json({ message: 'Upload to Supabase failed', error: error.message });
     }
 
-    // ✅ บันทึก URL ของไฟล์ลงในฐานข้อมูล
+    // ✅ บันทึก URL ไฟล์ลงในฐานข้อมูล
     const fileUrl = supabase.storage.from('upload').getPublicUrl(filePath).publicUrl;
     const query = `
       INSERT INTO old_projects (old_project_name_th, old_project_name_eng, project_type, document_year, file_path)
@@ -42,6 +54,7 @@ exports.addOldProject = async (req, res) => {
     res.status(500).json({ message: 'Database error' });
   }
 };
+
 
 // ✅ ฟังก์ชันดึงข้อมูลโครงงานเก่าทั้งหมด
 exports.getOldProjects = async (req, res) => {
@@ -125,7 +138,7 @@ exports.deleteOldProject = async (req, res) => {
 
     // ✅ ลบไฟล์จาก Supabase ถ้ามี
     if (fileUrl) {
-      const storageUrl = 'https://your-supabase-url.com/storage/v1/object/public/upload/';
+      const storageUrl = 'https://tgyexptoqpnoxcalnkyo.supabase.co/storage/v1/object/public/upload/';
       const filePath = fileUrl.replace(storageUrl, '');
 
       const { error } = await supabase.storage.from('upload').remove([filePath]);
