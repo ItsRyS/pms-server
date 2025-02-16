@@ -1,11 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const oldProjectsController = require('../controllers/oldProjectsController');
+const multer = require('multer');
 
-// ✅ ใช้ `uploadMiddleware` สำหรับอัปโหลดไฟล์
+const upload = multer({ storage: multer.memoryStorage() }); // ✅ ใช้ memoryStorage() เพื่ออัปโหลดไฟล์ไปยัง Supabase
+
+// ✅ เส้นทาง API สำหรับโครงงานเก่า
 router.get('/', oldProjectsController.getOldProjects);
-router.post('/', oldProjectsController.uploadMiddleware, oldProjectsController.uploadFileToSupabase, oldProjectsController.addOldProject);
-router.put('/:id', oldProjectsController.uploadMiddleware, oldProjectsController.uploadFileToSupabase, oldProjectsController.updateOldProject);
+router.post('/', upload.single('file'), oldProjectsController.addOldProject);
+router.put('/:id', upload.single('file'), oldProjectsController.updateOldProject);
 router.delete('/:id', oldProjectsController.deleteOldProject);
 
 // ✅ Middleware จัดการ Error
