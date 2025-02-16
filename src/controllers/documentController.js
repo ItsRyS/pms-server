@@ -104,39 +104,29 @@ exports.deleteDocument = async (req, res) => {
   const { id } = req.params;
 
   try {
-    // ดึงข้อมูลเอกสารจากฐานข้อมูล
-    const [documents] = await db.query(
-      'SELECT doc_path FROM document_forms WHERE doc_id = ?',
-      [id]
+    const [results] = await db.query(
+      `SELECT doc_path FROM document_forms WHERE doc_id = ?`, [id]
     );
 
-    if (documents.length === 0) {
+    if (results.length === 0) {
       return res.status(404).json({ message: 'Document not found' });
     }
 
-    const doc = documents[0];
+    const fileUrl = results[0].doc_path;
+    const filePath = fileUrl.split('/').slice(1).join('/'); // แปลง URL เป็น path สำหรับ Supabase
 
-    // แปลง URL เป็น path ที่ใช้ใน Supabase
-    const storageUrl = 'https://tgyexptoqpnoxcalnkyo.supabase.co/storage/v1/object/public/upload/';
-    const filePath = doc.doc_path.replace(storageUrl, '');
+    console.log(`🔍 Checking file existence in Supabase: ${filePath}`);
 
-    // ลบไฟล์จาก Supabase Storage
-    const { error: deleteError } = await supabase.storage
-      .from('upload')
-      .remove([filePath]);
-
-    if (deleteError) {
-      console.error('Supabase Delete Error:', deleteError);
-      // ถ้าลบไฟล์ไม่สำเร็จ ยังคงดำเนินการลบข้อมูลในฐานข้อมูลต่อ
-      console.warn('Failed to delete file from storage, proceeding with database deletion');
-    }
-
-    // ลบข้อมูลจากฐานข้อมูล
-    await db.query('DELETE FROM document_forms WHERE doc_id = ?', [id]);
+    // 🔥 ใช้ Promise.all() เพื่อลบไฟล์และข้อมูลพร้อมกัน
+    await Promise.all([
+      supabase.storage.from('upload').remove([filePath]),
+      db.query(`DELETE FROM document_forms WHERE doc_id = ?`, [id])
+    ]);
 
     res.status(200).json({ message: 'Document deleted successfully' });
+
   } catch (error) {
-    console.error('Delete Error:', error);
+    console.error('❌ Error deleting document:', error.message);
     res.status(500).json({ message: 'Failed to delete document', error: error.message });
   }
 };
