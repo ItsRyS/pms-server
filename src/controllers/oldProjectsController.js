@@ -7,11 +7,14 @@ const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage() });
 exports.uploadMiddleware = upload.single('file');
 const sanitizeFilename = (filename) => {
-  return filename
-    .normalize('NFC') // ✅ แก้ปัญหา Unicode Encoding
-    .replace(/[^\p{L}\p{N}._-]/gu, '_') // ✅ อนุญาตเฉพาะอักษร, ตัวเลข, `_`, `.`, `-`
-    .replace(/_{2,}/g, '_') // ✅ ป้องกัน `_` ซ้อนกันหลายตัว
-    .replace(/^_+|_+$/g, ''); // ✅ ลบ `_` ที่ขึ้นต้นและลงท้าย
+  let cleanName = filename
+    .normalize('NFC')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9ก-๙._-]/g, '_')
+    .replace(/_{2,}/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+  return cleanName.length > 0 ? cleanName : 'file';
 };
 
 // ✅ ฟังก์ชันเพิ่มโครงงานเก่า
@@ -27,7 +30,9 @@ exports.addOldProject = async (req, res) => {
     const fileExtension = path.extname(req.file.originalname);
     const baseFilename = path.basename(req.file.originalname, fileExtension);
     const sanitizedFilename = sanitizeFilename(baseFilename) + fileExtension;
-    const filePath = `old_projects/${Date.now()}_${sanitizedFilename}`;
+    const uniqueFilename = `${Date.now()}_${sanitizedFilename}${fileExtension}`;
+
+    const filePath = `old_projects/${uniqueFilename}`;
 
     // ✅ อัปโหลดไฟล์ไปยัง Supabase
     const { error } = await supabase.storage
