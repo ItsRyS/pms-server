@@ -74,7 +74,7 @@ exports.createRequest = async (req, res) => {
   }
 };
 
-// ✅ ฟังก์ชันดึงประวัติคำร้องโครงงานของนักเรียน
+// ✅ ฟังก์ชันดึงประวัติคำร้องโครงงานของนักเรียน รวมถึง `rejected`
 exports.getStudentRequests = async (req, res) => {
   const { studentId } = req.query;
 
@@ -94,9 +94,11 @@ exports.getStudentRequests = async (req, res) => {
       [studentId]
     );
 
+    console.log('📌 Database Results:', results); // ✅ ตรวจสอบข้อมูลจากฐานข้อมูล
+
     res.status(200).json({
       success: true,
-      data: results, // ✅ แสดงทุกคำร้อง รวมถึงที่ถูกปฏิเสธ
+      data: results, // ✅ แสดงทุกคำร้อง รวมถึง `rejected`
     });
 
   } catch (error) {
@@ -104,7 +106,6 @@ exports.getStudentRequests = async (req, res) => {
     res.status(500).json({ success: false, error: 'Failed to fetch requests.' });
   }
 };
-
 
 // ✅ ฟังก์ชันดึงคำร้องโครงงานทั้งหมด
 exports.getAllRequests = async (req, res) => {
@@ -127,7 +128,7 @@ exports.getAllRequests = async (req, res) => {
   }
 };
 
-// ✅ ฟังก์ชันอัปเดตสถานะคำร้องโครงงาน
+// ✅ ฟังก์ชันอัปเดตสถานะคำร้องโครงงาน (`pending` → `approved` หรือ `rejected`)
 exports.updateRequestStatus = async (req, res) => {
   const { requestId, status } = req.body;
 
@@ -176,4 +177,3 @@ exports.deleteRequest = async (req, res) => {
     res.status(500).json({ success: false, error: 'Failed to delete request.' });
   }
 };
-
