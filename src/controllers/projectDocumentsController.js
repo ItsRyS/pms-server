@@ -1,13 +1,8 @@
-const fs = require('fs');
 const db = require('../config/db');
 const supabase = require('../config/supabaseClient');
 const path = require('path');
 // Helper functions
-const deleteFileIfExists = (filePath) => {
-  if (filePath && fs.existsSync(filePath)) {
-    fs.unlinkSync(filePath);
-  }
-};
+
 
 const findDocumentById = async (documentId) => {
   const [document] = await db.query(
@@ -371,14 +366,27 @@ exports.deleteDocument = async (req, res) => {
     if (!document)
       return res.status(404).json({ message: 'Document not found.' });
 
-    deleteFileIfExists(document.file_path);
+    // 🔍 ดึงชื่อไฟล์จาก URL Supabase
+    const fileUrl = document.file_path;
+    const filePath = fileUrl.split('/').slice(-1)[0]; // ดึงชื่อไฟล์ออกมา
+    const storagePath = `project-documents/${filePath}`; // กำหนดพาธใน Supabase Storage
 
-    await db.query('DELETE FROM project_documents WHERE document_id = ?', [
-      documentId,
-    ]);
-    res.status(200).json({ message: 'Document deleted successfully.' });
+    // 🚀 ลบไฟล์จาก Supabase Storage
+    const { error: deleteError } = await supabase.storage
+      .from('upload') // เปลี่ยนให้ตรงกับชื่อ Bucket
+      .remove([storagePath]);
+
+    if (deleteError) {
+      console.warn('⚠️ Warning: Failed to delete file from Supabase:', deleteError.message);
+    }
+
+    // 🚀 ลบเอกสารจากฐานข้อมูล
+    await db.query('DELETE FROM project_documents WHERE document_id = ?', [documentId]);
+
+    res.status(200).json({ message: 'Document deleted successfully from database and Supabase Storage.' });
   } catch (error) {
-    console.error('Error deleting document:', error.message);
+    console.error('❌ Error deleting document:', error.message);
     res.status(500).json({ message: 'Failed to delete document.' });
   }
 };
+
