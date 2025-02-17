@@ -119,17 +119,17 @@ exports.uploadProfileImage = async (req, res) => {
     }
 
     // สร้างชื่อไฟล์ที่ปลอดภัย
-    const fileExtension = path.extname(file.originalname); // นามสกุลไฟล์ (.jpg, .png, ฯลฯ)
-    const baseFilename = path.basename(file.originalname, fileExtension); // ชื่อไฟล์ไม่รวม extension
-    const sanitizedFilename = sanitizeFilename(baseFilename); // ล้างชื่อไฟล์
+    const fileExtension = path.extname(file.originalname);
+    const baseFilename = path.basename(file.originalname, fileExtension);
+    const sanitizedFilename = sanitizeFilename(baseFilename);
     const filePath = `profile-images/${Date.now()}_${sanitizedFilename}${fileExtension}`;
 
     // อ่านไฟล์เป็น buffer
     const fileBuffer = fs.readFileSync(file.path);
 
-    // อัปโหลดไฟล์ไปที่ Supabase Storage
+    // ✅ เปลี่ยนจาก `profile-images` เป็น `upload` (Bucket) และเก็บใน `profile-images/`
     const { error } = await supabase.storage
-      .from('profile-images')
+      .from('upload') // เปลี่ยนจาก `profile-images` เป็น `upload`
       .upload(filePath, fileBuffer, { contentType: file.mimetype });
 
     if (error) {
@@ -137,16 +137,15 @@ exports.uploadProfileImage = async (req, res) => {
       return res.status(500).json({ error: 'Failed to upload profile image' });
     }
 
-    // สร้าง public URL ของไฟล์
-    const { publicURL } = supabase.storage.from('profile-images').getPublicUrl(filePath);
+    // ✅ ใช้ Public URL ที่ถูกต้อง
+    const { publicURL } = supabase.storage.from('upload').getPublicUrl(filePath);
 
-    // บันทึก URL ลงฐานข้อมูล
+    // อัปเดต URL ลงฐานข้อมูล
     await db.query('UPDATE users SET profile_image = ? WHERE user_id = ?', [
       publicURL,
       userId,
     ]);
 
-    // ส่ง URL ของรูปภาพกลับไป
     res.status(200).json({ profileImage: publicURL });
 
   } catch (error) {
@@ -154,6 +153,7 @@ exports.uploadProfileImage = async (req, res) => {
     res.status(500).json({ error: 'Failed to upload profile image' });
   }
 };
+
 exports.createUser = async (req, res) => {
   const { username, email, password, role } = req.body;
 
