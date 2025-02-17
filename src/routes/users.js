@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const userController = require('../controllers/userController');
 const { uploadProfile } = require('../config/multer');
-console.log("🔍 Debug userController:", userController);
+//console.log("🔍 Debug userController:", userController);
 
 const { verifyToken } = require('../middleware/authMiddleware');
 

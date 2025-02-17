@@ -1,9 +1,18 @@
 const bcrypt = require('bcrypt');
 const db = require('../config/db');
-const fs = require('fs');
 const path = require('path');
+const supabase = require('../config/supabaseClient');
 
-// Fetch all users
+const sanitizeFilename = (filename) => {
+  let cleanName = filename
+    .normalize('NFC')
+    .replace(/[\u0300-\u036f]/g, '') // ลบตัวกำกับเสียง
+    .replace(/[^a-zA-Z0-9ก-๙._-]/g, '_') // แทนที่ตัวอักษรพิเศษ
+    .replace(/_{2,}/g, '_') // แทนที่หลาย _ ด้วย _
+    .replace(/^_+|_+$/g, ''); // ลบ _ ที่ต้นและท้าย
+
+  return cleanName.length > 0 ? cleanName : 'file';
+};
 exports.getAllUsers = async (req, res) => {
   try {
     const [results] = await db.query('SELECT * FROM users');
@@ -15,27 +24,27 @@ exports.getAllUsers = async (req, res) => {
 };
 
 // Create a new user
-exports.createUser = async (req, res) => {
-  const { username, email, password, role } = req.body;
-
-  if (!username || !email || !password) {
-    return res.status(400).json({ error: 'Missing required fields' });
-  }
-
+exports.getCurrentUser = async (req, res) => {
   try {
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const [result] = await db.query(
-      `INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)`,
-      [username, email, hashedPassword, role || 'student']
-    );
-    res
-      .status(201)
-      .json({ message: 'User created successfully', userId: result.insertId });
+    if (!req.user || !req.user.user_id) {
+      return res.status(401).json({ error: 'Unauthorized: User not found' });
+    }
+
+    const userId = req.user.user_id;
+    const [results] = await db.query('SELECT * FROM users WHERE user_id = ?', [userId]);
+
+    if (results.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const { user_id, username, email, role, profile_image } = results[0];
+    res.status(200).json({ id: user_id, username, email, role, profile_image });
   } catch (error) {
-    console.error('Error creating user:', error.message);
+    console.error('Error fetching user:', error.message);
     res.status(500).json({ error: 'Database query failed' });
   }
 };
+
 
 // Update user data
 exports.updateUser = async (req, res) => {
@@ -110,42 +119,44 @@ exports.getCurrentUser = async (req, res) => {
   }
 };
 
-
 exports.uploadProfileImage = async (req, res) => {
   try {
-    const userId = req.session.user.user_id;
-    const profileImage = req.file.path.replace(/\\/g, '/'); // Normalize path for cross-platform compatibility
-
-    // Fetch old profile image from database
-    const [user] = await db.query('SELECT profile_image FROM users WHERE user_id = ?', [userId]);
-    const oldProfileImage = user[0]?.profile_image;
-
-    // Construct full path to old profile image
-    if (oldProfileImage) {
-      const fullPath = path.join(__dirname, '..', '..', oldProfileImage); // Adjust path for server structure
-      console.log('Full path to old profile image:', fullPath);
-
-      if (fs.existsSync(fullPath)) {
-        try {
-          fs.unlinkSync(fullPath); // Delete old file
-          console.log('Deleted old profile image:', fullPath);
-        } catch (err) {
-          console.error('Error deleting old profile image:', err.message);
-        }
-      } else {
-        console.log('File does not exist:', fullPath);
-      }
+    if (!req.user || !req.user.user_id) {
+      return res.status(401).json({ error: 'Unauthorized: User not found' });
     }
 
-    // Update new profile image in database
-    await db.query('UPDATE users SET profile_image = ? WHERE user_id = ?', [profileImage, userId]);
+    const userId = req.user.user_id;
+    const file = req.file;
 
-    // Update session
-    req.session.user.profileImage = profileImage;
+    if (!file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
 
-    res.status(200).json({ profileImage });
+    // ล้างชื่อไฟล์
+    const fileExtension = path.extname(file.originalname);
+    const baseFilename = path.basename(file.originalname, fileExtension);
+    const sanitizedFilename = sanitizeFilename(baseFilename);
+    const filePath = `profile-images/${Date.now()}_${sanitizedFilename}${fileExtension}`;
+
+    // อัปโหลดไปที่ Supabase Storage
+    const { error } = await supabase.storage
+      .from('profile-images')
+      .upload(filePath, file.buffer, { contentType: file.mimetype });
+
+    if (error) {
+      console.error('❌ Supabase Upload Error:', error.message);
+      return res.status(500).json({ error: 'Failed to upload profile image' });
+    }
+
+    // URL ของไฟล์ที่ Supabase
+    const imageUrl = `https://tgyexptoqpnoxcalnkyo.supabase.co/storage/v1/object/public/${filePath}`; // แก้ไข URL ตามที่คุณต้องการprocess.env.SUPABASE_URL}/storage/v1/object/public/${filePath}`;
+
+    // อัปเดต URL ในฐานข้อมูล
+    await db.query('UPDATE users SET profile_image = ? WHERE user_id = ?', [imageUrl, userId]);
+
+    res.status(200).json({ profileImage: imageUrl });
   } catch (error) {
-    console.error('Error uploading profile image:', error.message);
+    console.error('❌ Error uploading profile image:', error.message);
     res.status(500).json({ error: 'Failed to upload profile image' });
   }
 };
