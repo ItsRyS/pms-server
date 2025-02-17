@@ -1,6 +1,6 @@
 const fs = require('fs');
 const db = require('../config/db');
-const supabase = require('../config/supabase');
+const supabase = require('../config/supabaseClient');
 const path = require('path');
 // Helper functions
 const deleteFileIfExists = (filePath) => {
