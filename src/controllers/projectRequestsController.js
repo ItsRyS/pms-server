@@ -75,6 +75,7 @@ exports.createRequest = async (req, res) => {
 };
 
 // ✅ ฟังก์ชันดึงประวัติคำร้องโครงงานของนักเรียน รวมถึง `rejected`
+// ✅ ฟังก์ชันดึงประวัติคำร้องโครงงานทั้งหมดของนักศึกษา
 exports.getStudentRequests = async (req, res) => {
   const { studentId } = req.query;
 
@@ -94,11 +95,9 @@ exports.getStudentRequests = async (req, res) => {
       [studentId]
     );
 
-    console.log('📌 Database Results:', results); // ✅ ตรวจสอบข้อมูลจากฐานข้อมูล
-
     res.status(200).json({
       success: true,
-      data: results, // ✅ แสดงทุกคำร้อง รวมถึง `rejected`
+      data: results, // ✅ ดึงทุกสถานะ (pending, approved, rejected)
     });
 
   } catch (error) {
@@ -106,6 +105,7 @@ exports.getStudentRequests = async (req, res) => {
     res.status(500).json({ success: false, error: 'Failed to fetch requests.' });
   }
 };
+
 
 // ✅ ฟังก์ชันดึงคำร้องโครงงานทั้งหมด (รวมอาจารย์ที่ปรึกษาและนักศึกษา)
 exports.getAllRequests = async (req, res) => {
