@@ -19,9 +19,9 @@ const findDocumentById = async (documentId) => {
 
 // Upload document
 exports.uploadDocument = async (req, res) => {
-    console.log('🚀 Request Headers:', req.headers);
-    console.log('📂 Received file:', req.file);
-    console.log('📝 Request Body:', req.body);
+    //console.log('🚀 Request Headers:', req.headers);
+    //console.log('📂 Received file:', req.file);
+    //console.log('📝 Request Body:', req.body);
   const { request_id, type_id } = req.body;
   const file = req.file;
 
@@ -52,7 +52,9 @@ exports.uploadDocument = async (req, res) => {
     if (error) throw error;
 
     // บันทึก URL ไฟล์ลงในฐานข้อมูล
-    const publicUrl = `https://tgyexptoqpnoxcalnkyo.supabase.co/storage/v1/object/public/Document/${filePath}`;
+    const { data: { publicUrl } } = supabase.storage
+      .from('upload')
+      .getPublicUrl(filePath);
     await db.query(
       'INSERT INTO project_documents (request_id, type_id, file_path) VALUES (?, ?, ?)',
       [request_id, type_id, publicUrl]
@@ -223,7 +225,6 @@ exports.resubmitDocument = async (req, res) => {
   try {
     await connection.beginTransaction();
 
-    // ค้นหารายละเอียดเอกสารที่ส่งมาก่อนหน้านี้
     const [documentDetails] = await connection.query(
       'SELECT request_id, type_id, file_path FROM project_documents WHERE document_id = ?',
       [id]
@@ -235,22 +236,19 @@ exports.resubmitDocument = async (req, res) => {
 
     const { request_id, type_id, file_path: oldFileUrl } = documentDetails[0];
 
-    // ดึงชื่อไฟล์เก่าจาก URL
+    // ดึงชื่อไฟล์เก่าจาก URL และลบออกจาก Supabase
     const oldFilePath = oldFileUrl.split('/').pop();
+    const oldStoragePath = `project-documents/${oldFilePath}`;
 
-    // ลบไฟล์เก่าออกจาก Supabase Storage
     const { error: deleteError } = await supabase.storage
-      .from('Document')
-      .remove([`project-documents/${oldFilePath}`]);
+      .from('upload')
+      .remove([oldStoragePath]);
 
     if (deleteError) {
-      console.warn(
-        'Warning: Failed to delete old file from Supabase:',
-        deleteError.message
-      );
+      console.warn('Warning: Failed to delete old file from Supabase:', deleteError.message);
     }
 
-    // กำหนดชื่อไฟล์ที่ปลอดภัย
+    // อัปโหลดไฟล์ใหม่
     const fileExtension = path.extname(file.originalname);
     const baseFilename = path.basename(file.originalname, fileExtension);
     const sanitizedFilename = baseFilename
@@ -263,9 +261,8 @@ exports.resubmitDocument = async (req, res) => {
     const uniqueFilename = `${Date.now()}_${sanitizedFilename}${fileExtension}`;
     const newFilePath = `project-documents/${uniqueFilename}`;
 
-    // อัปโหลดไฟล์ใหม่ไปที่ Supabase
     const { error: uploadError } = await supabase.storage
-      .from('Document')
+      .from('upload')
       .upload(newFilePath, file.buffer, {
         contentType: file.mimetype,
         upsert: true,
@@ -273,16 +270,17 @@ exports.resubmitDocument = async (req, res) => {
 
     if (uploadError) throw uploadError;
 
-    // สร้าง URL สาธารณะสำหรับไฟล์ใหม่
-    const newFileUrl = `https://tgyexptoqpnoxcalnkyo.supabase.co/storage/v1/object/public/Document/${newFilePath}`;
+    // สร้าง URL สาธารณะใหม่
+    const { data: { publicUrl: newFileUrl } } = supabase.storage
+      .from('upload')
+      .getPublicUrl(newFilePath);
 
-    // ลบเรคคอร์ดเก่าออกจากฐานข้อมูล
+    // อัปเดตฐานข้อมูล
     await connection.query(
       'DELETE FROM project_documents WHERE document_id = ?',
       [id]
     );
 
-    // เพิ่มไฟล์ใหม่ลงในฐานข้อมูล พร้อมเปลี่ยนสถานะเป็น 'pending'
     await connection.query(
       "INSERT INTO project_documents (request_id, type_id, file_path, status) VALUES (?, ?, ?, 'pending')",
       [request_id, type_id, newFileUrl]
