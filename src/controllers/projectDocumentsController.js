@@ -19,11 +19,13 @@ const findDocumentById = async (documentId) => {
 
 // Upload document
 exports.uploadDocument = async (req, res) => {
-  console.log('Received file:', req.file);
+    console.log('🚀 Request Headers:', req.headers);
+    console.log('📂 Received file:', req.file);
+    console.log('📝 Request Body:', req.body);
   const { request_id, type_id } = req.body;
   const file = req.file;
 
-  if (!file) return res.status(400).json({ message: 'File upload failed.' });
+  if (!file) return res.status(400).json({ message: 'File upload failed.No file received.' });
 
   try {
     // กำหนดชื่อไฟล์ที่ปลอดภัย
