@@ -127,25 +127,35 @@ exports.uploadProfileImage = async (req, res) => {
     // อ่านไฟล์เป็น buffer
     const fileBuffer = fs.readFileSync(file.path);
 
-    // ✅ เปลี่ยนจาก `profile-images` เป็น `upload` (Bucket) และเก็บใน `profile-images/`
-    const { error } = await supabase.storage
-      .from('upload') // เปลี่ยนจาก `profile-images` เป็น `upload`
+    // ✅ อัปโหลดไปที่ Supabase Storage
+    const { data, error } = await supabase.storage
+      .from('upload')
       .upload(filePath, fileBuffer, { contentType: file.mimetype });
 
-    if (error) {
-      console.error('❌ Supabase Upload Error:', error.message);
+    if (error || !data) {
+      console.error('❌ Supabase Upload Error:', error?.message);
       return res.status(500).json({ error: 'Failed to upload profile image' });
     }
 
-    // ✅ ใช้ Public URL ที่ถูกต้อง
+    // ✅ ดึง Public URL ของรูปภาพ
     const { publicURL } = supabase.storage.from('upload').getPublicUrl(filePath);
 
-    // อัปเดต URL ลงฐานข้อมูล
-    await db.query('UPDATE users SET profile_image = ? WHERE user_id = ?', [
-      publicURL,
-      userId,
-    ]);
+    if (!publicURL) {
+      console.error('❌ Supabase URL Error: Failed to get public URL');
+      return res.status(500).json({ error: 'Failed to retrieve image URL' });
+    }
 
+    // ✅ อัปเดต URL ลงในฐานข้อมูล
+    const [result] = await db.query(
+      'UPDATE users SET profile_image = ? WHERE user_id = ?',
+      [publicURL, userId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // ✅ คืนค่า URL ใหม่ไปยัง Client
     res.status(200).json({ profileImage: publicURL });
 
   } catch (error) {
@@ -153,6 +163,7 @@ exports.uploadProfileImage = async (req, res) => {
     res.status(500).json({ error: 'Failed to upload profile image' });
   }
 };
+
 
 exports.createUser = async (req, res) => {
   const { username, email, password, role } = req.body;
