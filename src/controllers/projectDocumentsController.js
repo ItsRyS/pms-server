@@ -19,6 +19,7 @@ const findDocumentById = async (documentId) => {
 
 // Upload document
 exports.uploadDocument = async (req, res) => {
+  console.log('Received file:', req.file);
   const { request_id, type_id } = req.body;
   const file = req.file;
 
@@ -40,7 +41,7 @@ exports.uploadDocument = async (req, res) => {
 
     // อัปโหลดไฟล์ไปที่ Supabase
     const { error } = await supabase.storage
-      .from('Document')
+      .from('upload')
       .upload(filePath, file.buffer, {
         contentType: file.mimetype,
         upsert: true,
