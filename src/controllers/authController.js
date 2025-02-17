@@ -18,10 +18,10 @@ exports.login = async (req, res) => {
     const [userResult] = await db.query("SELECT * FROM users WHERE email = ?", [email]);
     const user = userResult[0];
 
-    if (!user) return res.status(401).json({ error: "Invalid credentials" });
+    if (!user) return res.status(401).json({ error: "ไม่พบผู้ใช้" });
 
     const passwordMatch = await bcrypt.compare(password, user.password);
-    if (!passwordMatch) return res.status(401).json({ error: "Invalid credentials" });
+    if (!passwordMatch) return res.status(401).json({ error: "รหัสไม่ถูกต้อง" });
 
     // สร้าง JWT Token
     const token = generateToken(user);
