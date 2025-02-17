@@ -20,11 +20,12 @@ router.post('/update-session', verifyToken, async (req, res) => {
     req.user.username = username;
     req.user.profileImage = profileImage;
 
-    res.status(200).json({ message: 'Session updated successfully' });
+    res.status(200).json({ message: 'Session updated successfully', user: req.user });
   } catch (error) {
     console.error('Error updating session:', error.message);
     res.status(500).json({ error: 'Failed to update session' });
   }
 });
+
 
 module.exports = router;
