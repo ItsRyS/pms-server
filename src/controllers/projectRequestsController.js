@@ -107,15 +107,24 @@ exports.getStudentRequests = async (req, res) => {
   }
 };
 
-// ✅ ฟังก์ชันดึงคำร้องโครงงานทั้งหมด
+// ✅ ฟังก์ชันดึงคำร้องโครงงานทั้งหมด (รวมอาจารย์ที่ปรึกษาและนักศึกษา)
 exports.getAllRequests = async (req, res) => {
   try {
     const [results] = await db.query(
       `
-      SELECT pr.request_id, pr.project_name, pr.project_name_eng, pr.status, pr.created_at, pr.student_id, u.username
+      SELECT
+        pr.request_id,
+        pr.project_name,
+        pr.project_name_eng,
+        pr.status,
+        pr.created_at,
+        pr.student_id,
+        u.username AS student_name,
+        t.teacher_name
       FROM project_requests pr
       JOIN students_projects sp ON pr.request_id = sp.request_id
       JOIN users u ON pr.student_id = u.user_id
+      LEFT JOIN teacher_info t ON pr.advisor_id = t.teacher_id
       ORDER BY pr.created_at DESC
       `
     );
@@ -127,6 +136,7 @@ exports.getAllRequests = async (req, res) => {
     res.status(500).json({ success: false, error: 'Failed to fetch requests.' });
   }
 };
+
 
 // ✅ ฟังก์ชันอัปเดตสถานะคำร้องโครงงาน (`pending` → `approved` หรือ `rejected`)
 exports.updateRequestStatus = async (req, res) => {
