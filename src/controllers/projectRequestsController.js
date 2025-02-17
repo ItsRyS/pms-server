@@ -114,24 +114,20 @@ exports.getStudentRequests = async (req, res) => {
 // ✅ ฟังก์ชันดึงคำร้องโครงงานทั้งหมด
 exports.getAllRequests = async (req, res) => {
   try {
-    const [projects] = await db.query(
+    const [results] = await db.query(
       `
-      SELECT pr.request_id, pr.project_name, pr.project_name_eng, pr.status,
-             pr.advisor_id, ti.teacher_name,
-             GROUP_CONCAT(DISTINCT u.username) AS students
+      SELECT pr.request_id, pr.project_name, pr.project_name_eng, pr.status, pr.created_at, pr.student_id, u.username
       FROM project_requests pr
-      LEFT JOIN teacher_info ti ON pr.advisor_id = ti.teacher_id
-      LEFT JOIN students_projects sp ON pr.request_id = sp.request_id
-      LEFT JOIN users u ON sp.student_id = u.user_id
-      GROUP BY pr.request_id
-      ORDER BY pr.created_at DESC;
+      JOIN students_projects sp ON pr.request_id = sp.request_id
+      JOIN users u ON pr.student_id = u.user_id
+      ORDER BY pr.created_at DESC
       `
     );
 
-    res.status(200).json({ success: true, data: projects });
+    res.status(200).json({ success: true, data: results });
 
   } catch (error) {
-    console.error('❌ Error fetching project requests:', error.message);
+    console.error('❌ Error fetching all project requests:', error.message);
     res.status(500).json({ success: false, error: 'Failed to fetch requests.' });
   }
 };
@@ -185,3 +181,4 @@ exports.deleteRequest = async (req, res) => {
     res.status(500).json({ success: false, error: 'Failed to delete request.' });
   }
 };
+
