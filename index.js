@@ -15,14 +15,13 @@ const JWT_SECRET = process.env.JWT_SECRET || "yourSuperSecretKey";
 
 
 
-app.use(
-  cors({
-    origin: "https://pms-client-production.up.railway.app",
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
+app.use(cors({
+  origin: "https://pms-client-production.up.railway.app",
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "Cookie"],  // เพิ่ม Cookie
+  exposedHeaders: ["set-cookie", "Authorization"] // เพิ่ม exposed headers
+}));
 
 
 app.use(cookieParser());

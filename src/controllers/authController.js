@@ -23,12 +23,31 @@ exports.login = async (req, res) => {
     const passwordMatch = await bcrypt.compare(password, user.password);
     if (!passwordMatch) return res.status(401).json({ error: "รหัสไม่ถูกต้อง" });
 
-    // สร้าง JWT Token
+    // สร้าง token
     const token = generateToken(user);
 
-    res.cookie("token", token, { httpOnly: true, secure: true, sameSite: "None" });
-    res.status(200).json({ message: "Login successful", role: user.role, token });
-  } catch {
+    // ตั้งค่า cookie
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "None",
+      maxAge: 24 * 60 * 60 * 1000 // 1 day
+    });
+
+    // ส่ง token กลับในทั้ง response body และ header
+    res.setHeader('Authorization', `Bearer ${token}`);
+    res.status(200).json({
+      message: "Login successful",
+      role: user.role,
+      token,
+      user: {
+        id: user.user_id,
+        username: user.username,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    console.error('Login error:', error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };

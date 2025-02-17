@@ -1,25 +1,27 @@
 const jwt = require("jsonwebtoken");
 
 const verifyToken = (req, res, next) => {
-  const token = req.cookies.token || req.headers["authorization"]?.split(" ")[1];
+  try {
+    const token = req.cookies.token || req.headers["authorization"]?.split(" ")[1];
 
-  if (!token) return res.status(401).json({ message: "Unauthorized" });
+    if (!token) {
+      console.error('No token provided');
+      return res.status(401).json({ message: "กรุณาเข้าสู่ระบบ" });
+    }
 
-  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-    if (err) return res.status(403).json({ message: "Token is invalid" });
-    req.user = decoded;
+    jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+      if (err) {
+        console.error('Token verification failed:', err);
+        return res.status(403).json({ message: "Token ไม่ถูกต้องหรือหมดอายุ" });
+      }
 
-    // 🔄 ต่ออายุ JWT และส่งกลับ
-    const newToken = jwt.sign(
-      { user_id: decoded.user_id, role: decoded.role, username: decoded.username },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN }
-    );
-    res.setHeader("Authorization", `Bearer ${newToken}`);
-
-    next();
-  });
-
+      req.user = decoded;
+      next();
+    });
+  } catch (error) {
+    console.error('Auth middleware error:', error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดในการตรวจสอบสิทธิ์" });
+  }
 };
 
 module.exports = { verifyToken };
