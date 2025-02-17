@@ -143,29 +143,24 @@ exports.returnDocument = async (req, res) => {
   const { documentId } = req.params;
   const file = req.file;
 
-  if (!file) return res.status(400).json({ message: 'File upload failed.' });
+  console.log("📂 File received:", file); // ✅ ตรวจสอบว่าไฟล์ถูกส่งมาหรือไม่
+
+  if (!file) return res.status(400).json({ message: 'File upload failed. No file received.' });
 
   try {
-    // ค้นหาเอกสารเดิม
     const document = await findDocumentById(documentId);
-    if (!document)
-      return res.status(404).json({ message: 'Document not found.' });
+    if (!document) return res.status(404).json({ message: 'Document not found.' });
 
     const oldFileUrl = document.file_path;
-
-    // ดึงชื่อไฟล์เก่าจาก URL
     const oldFilePath = oldFileUrl.split('/').pop();
 
-    // ลบไฟล์เก่าออกจาก Supabase Storage
+    // 🚀 ลบไฟล์เก่าออกจาก Supabase
     const { error: deleteError } = await supabase.storage
-      .from('Document')
+      .from('upload')
       .remove([`project-documents/${oldFilePath}`]);
 
     if (deleteError) {
-      console.warn(
-        'Warning: Failed to delete old file from Supabase:',
-        deleteError.message
-      );
+      console.warn("⚠️ Warning: Failed to delete old file from Supabase:", deleteError.message);
     }
 
     // กำหนดชื่อไฟล์ใหม่ให้ปลอดภัย
@@ -181,9 +176,11 @@ exports.returnDocument = async (req, res) => {
     const uniqueFilename = `${Date.now()}_${sanitizedFilename}${fileExtension}`;
     const newFilePath = `project-documents/${uniqueFilename}`;
 
-    // อัปโหลดไฟล์ที่แก้ไขไปที่ Supabase
+    console.log("📤 Uploading new file:", newFilePath); // ✅ Debug ก่อนอัปโหลด
+
+    // 🚀 อัปโหลดไฟล์ใหม่ไปที่ Supabase
     const { error: uploadError } = await supabase.storage
-      .from('Document')
+      .from('upload')
       .upload(newFilePath, file.buffer, {
         contentType: file.mimetype,
         upsert: true,
@@ -191,24 +188,24 @@ exports.returnDocument = async (req, res) => {
 
     if (uploadError) throw uploadError;
 
-    // สร้าง URL สาธารณะสำหรับไฟล์ใหม่
-    const newFileUrl = `https://tgyexptoqpnoxcalnkyo.supabase.co/storage/v1/object/public/Document/${newFilePath}`;
+    // 🔗 สร้าง Public URL ใหม่
+    const { data: { publicUrl: newFileUrl } } = supabase.storage.from('upload').getPublicUrl(newFilePath);
 
-    // อัปเดตฐานข้อมูลให้ใช้ไฟล์ที่แก้ไขใหม่
+    console.log("✅ New File URL:", newFileUrl); // ✅ Debug URL ของไฟล์ใหม่
+
+    // อัปเดตฐานข้อมูล
     await db.query(
       "UPDATE project_documents SET file_path = ?, status = 'returned' WHERE document_id = ?",
       [newFileUrl, documentId]
     );
 
-    res.status(200).json({
-      message: 'Document returned successfully.',
-      file_url: newFileUrl,
-    });
+    res.status(200).json({ message: 'Document returned successfully.', file_url: newFileUrl });
   } catch (error) {
-    console.error('Error returning document:', error.message);
+    console.error("❌ Error returning document:", error.message);
     res.status(500).json({ message: 'Failed to return document.' });
   }
 };
+
 
 // Resubmit document;
 exports.resubmitDocument = async (req, res) => {
