@@ -1,6 +1,7 @@
 const fs = require('fs');
 const db = require('../config/db');
-
+const supabase = require('../config/supabase');
+const path = require('path');
 // Helper functions
 const deleteFileIfExists = (filePath) => {
   if (filePath && fs.existsSync(filePath)) {
@@ -9,23 +10,54 @@ const deleteFileIfExists = (filePath) => {
 };
 
 const findDocumentById = async (documentId) => {
-  const [document] = await db.query('SELECT * FROM project_documents WHERE document_id = ?', [documentId]);
+  const [document] = await db.query(
+    'SELECT * FROM project_documents WHERE document_id = ?',
+    [documentId]
+  );
   return document[0];
 };
 
 // Upload document
 exports.uploadDocument = async (req, res) => {
   const { request_id, type_id } = req.body;
-  const file_path = req.file?.path;
+  const file = req.file;
 
-  if (!file_path) return res.status(400).json({ message: 'File upload failed.' });
+  if (!file) return res.status(400).json({ message: 'File upload failed.' });
 
   try {
+    // กำหนดชื่อไฟล์ที่ปลอดภัย
+    const fileExtension = path.extname(file.originalname);
+    const baseFilename = path.basename(file.originalname, fileExtension);
+    const sanitizedFilename = baseFilename
+      .normalize('NFC')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9ก-๙._-]/g, '_')
+      .replace(/_{2,}/g, '_')
+      .replace(/^_+|_+$/g, '');
+
+    const uniqueFilename = `${Date.now()}_${sanitizedFilename}${fileExtension}`;
+    const filePath = `project-documents/${uniqueFilename}`;
+
+    // อัปโหลดไฟล์ไปที่ Supabase
+    const { error } = await supabase.storage
+      .from('Document')
+      .upload(filePath, file.buffer, {
+        contentType: file.mimetype,
+        upsert: true,
+      });
+
+    if (error) throw error;
+
+    // บันทึก URL ไฟล์ลงในฐานข้อมูล
+    const publicUrl = `https://tgyexptoqpnoxcalnkyo.supabase.co/storage/v1/object/public/Document/${filePath}`;
     await db.query(
       'INSERT INTO project_documents (request_id, type_id, file_path) VALUES (?, ?, ?)',
-      [request_id, type_id, file_path]
+      [request_id, type_id, publicUrl]
     );
-    res.status(200).json({ message: 'อัพโหลดเอกสารสำเร็จ' });
+
+    res
+      .status(200)
+      .json({ message: 'อัพโหลดเอกสารสำเร็จ', file_url: publicUrl });
   } catch (error) {
     console.error('Error uploading document:', error.message);
     res.status(500).json({ message: 'เกิดข้อผิดพลาดในการบันทึกเอกสาร' });
@@ -104,42 +136,91 @@ exports.rejectDocument = async (req, res) => {
 };
 
 // Return document
+
 exports.returnDocument = async (req, res) => {
   const { documentId } = req.params;
-  const file_path = req.file?.path;
+  const file = req.file;
 
-  if (!file_path) return res.status(400).json({ message: 'File upload failed.' });
+  if (!file) return res.status(400).json({ message: 'File upload failed.' });
 
   try {
+    // ค้นหาเอกสารเดิม
     const document = await findDocumentById(documentId);
-    if (!document) return res.status(404).json({ message: 'Document not found.' });
+    if (!document)
+      return res.status(404).json({ message: 'Document not found.' });
 
-    deleteFileIfExists(document.file_path);
+    const oldFileUrl = document.file_path;
 
+    // ดึงชื่อไฟล์เก่าจาก URL
+    const oldFilePath = oldFileUrl.split('/').pop();
+
+    // ลบไฟล์เก่าออกจาก Supabase Storage
+    const { error: deleteError } = await supabase.storage
+      .from('Document')
+      .remove([`project-documents/${oldFilePath}`]);
+
+    if (deleteError) {
+      console.warn(
+        'Warning: Failed to delete old file from Supabase:',
+        deleteError.message
+      );
+    }
+
+    // กำหนดชื่อไฟล์ใหม่ให้ปลอดภัย
+    const fileExtension = path.extname(file.originalname);
+    const baseFilename = path.basename(file.originalname, fileExtension);
+    const sanitizedFilename = baseFilename
+      .normalize('NFC')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9ก-๙._-]/g, '_')
+      .replace(/_{2,}/g, '_')
+      .replace(/^_+|_+$/g, '');
+
+    const uniqueFilename = `${Date.now()}_${sanitizedFilename}${fileExtension}`;
+    const newFilePath = `project-documents/${uniqueFilename}`;
+
+    // อัปโหลดไฟล์ที่แก้ไขไปที่ Supabase
+    const { error: uploadError } = await supabase.storage
+      .from('Document')
+      .upload(newFilePath, file.buffer, {
+        contentType: file.mimetype,
+        upsert: true,
+      });
+
+    if (uploadError) throw uploadError;
+
+    // สร้าง URL สาธารณะสำหรับไฟล์ใหม่
+    const newFileUrl = `https://tgyexptoqpnoxcalnkyo.supabase.co/storage/v1/object/public/Document/${newFilePath}`;
+
+    // อัปเดตฐานข้อมูลให้ใช้ไฟล์ที่แก้ไขใหม่
     await db.query(
       "UPDATE project_documents SET file_path = ?, status = 'returned' WHERE document_id = ?",
-      [file_path, documentId]
+      [newFileUrl, documentId]
     );
 
-    res.status(200).json({ message: 'Document returned successfully.' });
+    res.status(200).json({
+      message: 'Document returned successfully.',
+      file_url: newFileUrl,
+    });
   } catch (error) {
     console.error('Error returning document:', error.message);
     res.status(500).json({ message: 'Failed to return document.' });
   }
 };
 
-// Resubmit document
+// Resubmit document;
 exports.resubmitDocument = async (req, res) => {
   const { id } = req.params;
-  const file_path = req.file?.path;
+  const file = req.file;
 
-  if (!file_path) return res.status(400).json({ message: 'File upload failed.' });
+  if (!file) return res.status(400).json({ message: 'File upload failed.' });
 
   const connection = await db.getConnection();
 
   try {
     await connection.beginTransaction();
 
+    // ค้นหารายละเอียดเอกสารที่ส่งมาก่อนหน้านี้
     const [documentDetails] = await connection.query(
       'SELECT request_id, type_id, file_path FROM project_documents WHERE document_id = ?',
       [id]
@@ -149,17 +230,66 @@ exports.resubmitDocument = async (req, res) => {
       return res.status(404).json({ message: 'Document not found.' });
     }
 
-    const { request_id, type_id, file_path: oldFilePath } = documentDetails[0];
-    deleteFileIfExists(oldFilePath);
+    const { request_id, type_id, file_path: oldFileUrl } = documentDetails[0];
 
-    await connection.query('DELETE FROM project_documents WHERE document_id = ?', [id]);
+    // ดึงชื่อไฟล์เก่าจาก URL
+    const oldFilePath = oldFileUrl.split('/').pop();
+
+    // ลบไฟล์เก่าออกจาก Supabase Storage
+    const { error: deleteError } = await supabase.storage
+      .from('Document')
+      .remove([`project-documents/${oldFilePath}`]);
+
+    if (deleteError) {
+      console.warn(
+        'Warning: Failed to delete old file from Supabase:',
+        deleteError.message
+      );
+    }
+
+    // กำหนดชื่อไฟล์ที่ปลอดภัย
+    const fileExtension = path.extname(file.originalname);
+    const baseFilename = path.basename(file.originalname, fileExtension);
+    const sanitizedFilename = baseFilename
+      .normalize('NFC')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9ก-๙._-]/g, '_')
+      .replace(/_{2,}/g, '_')
+      .replace(/^_+|_+$/g, '');
+
+    const uniqueFilename = `${Date.now()}_${sanitizedFilename}${fileExtension}`;
+    const newFilePath = `project-documents/${uniqueFilename}`;
+
+    // อัปโหลดไฟล์ใหม่ไปที่ Supabase
+    const { error: uploadError } = await supabase.storage
+      .from('Document')
+      .upload(newFilePath, file.buffer, {
+        contentType: file.mimetype,
+        upsert: true,
+      });
+
+    if (uploadError) throw uploadError;
+
+    // สร้าง URL สาธารณะสำหรับไฟล์ใหม่
+    const newFileUrl = `https://tgyexptoqpnoxcalnkyo.supabase.co/storage/v1/object/public/Document/${newFilePath}`;
+
+    // ลบเรคคอร์ดเก่าออกจากฐานข้อมูล
+    await connection.query(
+      'DELETE FROM project_documents WHERE document_id = ?',
+      [id]
+    );
+
+    // เพิ่มไฟล์ใหม่ลงในฐานข้อมูล พร้อมเปลี่ยนสถานะเป็น 'pending'
     await connection.query(
       "INSERT INTO project_documents (request_id, type_id, file_path, status) VALUES (?, ?, ?, 'pending')",
-      [request_id, type_id, file_path]
+      [request_id, type_id, newFileUrl]
     );
 
     await connection.commit();
-    res.status(200).json({ message: 'Document resubmitted successfully.' });
+    res.status(200).json({
+      message: 'Document resubmitted successfully.',
+      file_url: newFileUrl,
+    });
   } catch (error) {
     await connection.rollback();
     console.error('Error resubmitting document:', error.message);
@@ -199,7 +329,9 @@ exports.getDocumentTypesWithStatus = async (req, res) => {
     res.status(200).json(results);
   } catch (error) {
     console.error('Error fetching document types with status:', error.message);
-    res.status(500).json({ message: 'Failed to fetch document types with status.' });
+    res
+      .status(500)
+      .json({ message: 'Failed to fetch document types with status.' });
   }
 };
 
@@ -235,11 +367,14 @@ exports.deleteDocument = async (req, res) => {
 
   try {
     const document = await findDocumentById(documentId);
-    if (!document) return res.status(404).json({ message: 'Document not found.' });
+    if (!document)
+      return res.status(404).json({ message: 'Document not found.' });
 
     deleteFileIfExists(document.file_path);
 
-    await db.query('DELETE FROM project_documents WHERE document_id = ?', [documentId]);
+    await db.query('DELETE FROM project_documents WHERE document_id = ?', [
+      documentId,
+    ]);
     res.status(200).json({ message: 'Document deleted successfully.' });
   } catch (error) {
     console.error('Error deleting document:', error.message);
