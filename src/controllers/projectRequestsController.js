@@ -94,15 +94,9 @@ exports.getStudentRequests = async (req, res) => {
       [studentId]
     );
 
-    const hasPendingOrApproved = results.some(
-      (request) => request.status === 'pending' || request.status === 'approved'
-    );
-
     res.status(200).json({
       success: true,
-      data: results,
-      hasPendingOrApproved,
-      ownerRequests: results.filter(request => request.student_id === studentId),
+      data: results, // ✅ แสดงทุกคำร้อง รวมถึงที่ถูกปฏิเสธ
     });
 
   } catch (error) {
@@ -110,6 +104,7 @@ exports.getStudentRequests = async (req, res) => {
     res.status(500).json({ success: false, error: 'Failed to fetch requests.' });
   }
 };
+
 
 // ✅ ฟังก์ชันดึงคำร้องโครงงานทั้งหมด
 exports.getAllRequests = async (req, res) => {
