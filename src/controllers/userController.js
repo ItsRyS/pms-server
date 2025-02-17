@@ -6,10 +6,10 @@ const fs = require('fs');
 const sanitizeFilename = (filename) => {
   let cleanName = filename
     .normalize('NFC')
-    .replace(/[\u0300-\u036f]/g, '') // ลบตัวกำกับเสียง
-    .replace(/[^a-zA-Z0-9ก-๙._-]/g, '_') // แทนที่ตัวอักษรพิเศษ
-    .replace(/_{2,}/g, '_') // แทนที่หลาย _ ด้วย _
-    .replace(/^_+|_+$/g, ''); // ลบ _ ที่ต้นและท้าย
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9ก-๙._-]/g, '_')
+    .replace(/_{2,}/g, '_')
+    .replace(/^_+|_+$/g, '');
 
   return cleanName.length > 0 ? cleanName : 'file';
 };
@@ -107,60 +107,101 @@ exports.deleteUser = async (req, res) => {
 
 exports.uploadProfileImage = async (req, res) => {
   try {
+    // 1. Validate request
     if (!req.user || !req.user.user_id) {
       return res.status(401).json({ error: 'Unauthorized: User not found' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    // 2. Validate file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
+    if (!allowedTypes.includes(req.file.mimetype)) {
+      return res.status(400).json({
+        error: 'Invalid file type. Only JPG, PNG and GIF are allowed'
+      });
     }
 
     const userId = req.user.user_id;
     const file = req.file;
 
-    if (!file) {
-      return res.status(400).json({ error: 'No file uploaded' });
-    }
-
-    // สร้างชื่อไฟล์ที่ปลอดภัย
+    // 3. Prepare filename
     const fileExtension = path.extname(file.originalname);
     const baseFilename = path.basename(file.originalname, fileExtension);
     const sanitizedFilename = sanitizeFilename(baseFilename);
-    const filePath = `profile-images/${Date.now()}_${sanitizedFilename}${fileExtension}`;
+    const filePath = `profile-images/${userId}_${Date.now()}_${sanitizedFilename}${fileExtension}`;
 
-    // อ่านไฟล์เป็น buffer
+    // 4. Read file
     const fileBuffer = fs.readFileSync(file.path);
 
-    // ✅ อัปโหลดไปที่ Supabase Storage
-    const { data, error } = await supabase.storage
+    // 5. Upload to Supabase
+    const { error: uploadError } = await supabase.storage
       .from('upload')
-      .upload(filePath, fileBuffer, { contentType: file.mimetype });
+      .upload(filePath, fileBuffer, {
+        contentType: file.mimetype,
+        cacheControl: '3600',
+        upsert: false
+      });
 
-    if (error || !data) {
-      console.error('❌ Supabase Upload Error:', error?.message);
-      return res.status(500).json({ error: 'Failed to upload profile image' });
+    if (uploadError) {
+      console.error('Supabase Upload Error:', uploadError);
+      return res.status(500).json({
+        error: 'Failed to upload profile image',
+        details: uploadError.message
+      });
+    }
+    
+    const { data: urlData } = supabase.storage
+      .from('upload')
+      .getPublicUrl(filePath);
+
+    if (!urlData || !urlData.publicUrl) {
+      return res.status(500).json({
+        error: 'Failed to get public URL for uploaded image'
+      });
     }
 
-    // ✅ ดึง Public URL ของรูปภาพ
-    const { publicURL } = supabase.storage.from('upload').getPublicUrl(filePath);
+    const [oldImage] = await db.query(
+      'SELECT profile_image FROM users WHERE user_id = ?',
+      [userId]
+    );
 
-    if (!publicURL) {
-      console.error('❌ Supabase URL Error: Failed to get public URL');
-      return res.status(500).json({ error: 'Failed to retrieve image URL' });
+    if (oldImage[0]?.profile_image) {
+      try {
+        const oldPath = new URL(oldImage[0].profile_image).pathname.split('/').pop();
+        await supabase.storage
+          .from('upload')
+          .remove([`profile-images/${oldPath}`]);
+      } catch (error) {
+        console.warn('Failed to delete old profile image:', error);
+      }
     }
 
-    // ✅ อัปเดต URL ลงในฐานข้อมูล
     const [result] = await db.query(
       'UPDATE users SET profile_image = ? WHERE user_id = ?',
-      [publicURL, userId]
+      [urlData.publicUrl, userId]
     );
 
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // ✅ คืนค่า URL ใหม่ไปยัง Client
-    res.status(200).json({ profileImage: publicURL });
+
+    fs.unlinkSync(file.path);
+
+    res.status(200).json({
+      message: 'Profile image updated successfully',
+      profileImage: urlData.publicUrl
+    });
 
   } catch (error) {
-    console.error('❌ Error uploading profile image:', error.message);
-    res.status(500).json({ error: 'Failed to upload profile image' });
+    console.error('Error in uploadProfileImage:', error);
+    res.status(500).json({
+      error: 'Failed to upload profile image',
+      details: error.message
+    });
   }
 };
 
