@@ -81,7 +81,7 @@ const oldProjectsRoutes = require("./src/routes/oldProjects");
 
 // API Routes
 app.use("/api/auth", authRoutes);
-app.use("/api/projects", verifyToken, projectRoutes);
+app.use("/api/projects", projectRoutes);
 app.use("/api/teacher",  teacherRoutes);
 app.use("/api/document", verifyToken, documentRoutes);
 app.use("/api/users", verifyToken, userRoutes);
