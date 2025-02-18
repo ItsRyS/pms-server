@@ -23,13 +23,15 @@ exports.getCompleteReport = async (req, res) => {
       });
     }
 
-    let documentPath = projectCheck[0].complete_report_path.replace(/\\/g, '/');
-    documentPath = documentPath.replace(/^.*[/]/, '');
-    const supabaseUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/project-documents/${documentPath}`;
+    let documentPath = projectCheck[0].complete_report_path;
+    if (!documentPath.startsWith('https')) {
+      documentPath = `${process.env.SUPABASE_URL}/storage/v1/object/public/${documentPath}`;
+    }
+    console.log('Generated Supabase URL:', documentPath);
 
     res.status(200).json({
       success: true,
-      documentPath: supabaseUrl,
+      documentPath: documentPath,
     });
   } catch (error) {
     console.error('Error fetching complete report:', error);
