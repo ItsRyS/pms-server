@@ -1,6 +1,5 @@
 const db = require('../config/db');
 
-// ฟังก์ชันสำหรับดึง Complete Report
 exports.getCompleteReport = async (req, res) => {
   const { projectId } = req.params;
 
@@ -24,18 +23,20 @@ exports.getCompleteReport = async (req, res) => {
       });
     }
 
-    let documentPath = projectCheck[0].complete_report_path.replace(/\\/g, '/');
-    documentPath = documentPath.replace(/^upload\/project-documents\//, '');
+    const documentPath = projectCheck[0].complete_report_path.replace(/\\/g, '/');
+    // Return the full Supabase URL directly
+    const supabaseUrl = `https://tgyexptoqpnoxcalnkyo.supabase.co/storage/v1/object/public/project-documents/${documentPath}`;
 
     res.status(200).json({
       success: true,
-      documentPath: `https://tgyexptoqpnoxcalnkyo.supabase.co/storage/v1/object/public/project-documents/${documentPath}`,
+      documentPath: supabaseUrl,
     });
   } catch (error) {
     console.error('Error fetching complete report:', error);
-    res
-      .status(500)
-      .json({ success: false, message: 'Failed to fetch complete report.' });
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch complete report.'
+    });
   }
 };
 
