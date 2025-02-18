@@ -23,9 +23,9 @@ exports.getCompleteReport = async (req, res) => {
       });
     }
 
-    const documentPath = projectCheck[0].complete_report_path.replace(/\\/g, '/');
-    // Return the full Supabase URL directly
-    const supabaseUrl = `https://tgyexptoqpnoxcalnkyo.supabase.co/storage/v1/object/public/project-documents/${documentPath}`;
+    let documentPath = projectCheck[0].complete_report_path.replace(/\\/g, '/');
+    documentPath = documentPath.replace(/^.*[/]/, '');
+    const supabaseUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/project-documents/${documentPath}`;
 
     res.status(200).json({
       success: true,
@@ -35,7 +35,7 @@ exports.getCompleteReport = async (req, res) => {
     console.error('Error fetching complete report:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch complete report.'
+      message: 'Failed to fetch complete report.',
     });
   }
 };
