@@ -32,7 +32,7 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.urlencoded({ extended: true }));
 
-// ✅ Middleware ตรวจสอบและต่ออายุ JWT
+//  Middleware ตรวจสอบและต่ออายุ JWT
 const verifyToken = (req, res, next) => {
   const token = req.cookies.token || req.headers["authorization"]?.split(" ")[1];
 
@@ -120,5 +120,5 @@ app.use((err, req, res) => {
 
 // Start Server
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
+  console.log(` Server running on http://localhost:${PORT}`);
 });

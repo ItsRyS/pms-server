@@ -1,6 +1,6 @@
 const db = require('../config/db');
 
-// ✅ ฟังก์ชันสร้างคำร้องโครงงานใหม่
+// ฟังก์ชันสร้างคำร้องโครงงานใหม่
 exports.createRequest = async (req, res) => {
   const {
     project_name,
@@ -22,7 +22,7 @@ exports.createRequest = async (req, res) => {
   try {
     await connection.beginTransaction();
 
-    // ✅ ตรวจสอบว่านักเรียนมีคำร้องที่ `pending` หรือ `approved` หรือไม่
+    // ตรวจสอบว่านักเรียนมีคำร้องที่ `pending` หรือ `approved` หรือไม่
     const [existingProjects] = await connection.query(
       `
       SELECT sp.student_id
@@ -42,7 +42,7 @@ exports.createRequest = async (req, res) => {
       });
     }
 
-    // ✅ เพิ่มคำร้องใหม่
+    // เพิ่มคำร้องใหม่
     const [result] = await connection.query(
       `
       INSERT INTO project_requests
@@ -54,7 +54,7 @@ exports.createRequest = async (req, res) => {
 
     const requestId = result.insertId;
 
-    // ✅ เพิ่มสมาชิกในกลุ่ม
+    // เพิ่มสมาชิกในกลุ่ม
     for (const memberId of groupMembers) {
       await connection.query(
         `INSERT INTO students_projects (request_id, student_id) VALUES (?, ?)`,
@@ -67,15 +67,13 @@ exports.createRequest = async (req, res) => {
 
   } catch (error) {
     await connection.rollback();
-    console.error('❌ Error creating project request:', error.message);
+    console.error(' Error creating project request:', error.message);
     res.status(500).json({ success: false, error: 'Failed to save data.' });
   } finally {
     connection.release();
   }
 };
 
-// ✅ ฟังก์ชันดึงประวัติคำร้องโครงงานของนักเรียน รวมถึง `rejected`
-// ✅ ฟังก์ชันดึงประวัติคำร้องโครงงานทั้งหมดของนักศึกษา
 exports.getStudentRequests = async (req, res) => {
   const { studentId } = req.query;
 
@@ -97,17 +95,17 @@ exports.getStudentRequests = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: results, // ✅ ดึงทุกสถานะ (pending, approved, rejected)
+      data: results, // ดึงทุกสถานะ (pending, approved, rejected)
     });
 
   } catch (error) {
-    console.error('❌ Error fetching student requests:', error.message);
+    console.error(' Error fetching student requests:', error.message);
     res.status(500).json({ success: false, error: 'Failed to fetch requests.' });
   }
 };
 
 
-// ✅ ฟังก์ชันดึงคำร้องโครงงานทั้งหมด (รวมอาจารย์ที่ปรึกษาและนักศึกษา)
+//  ฟังก์ชันดึงคำร้องโครงงานทั้งหมด (รวมอาจารย์ที่ปรึกษาและนักศึกษา)
 exports.getAllRequests = async (req, res) => {
   try {
     const [results] = await db.query(
@@ -132,13 +130,13 @@ exports.getAllRequests = async (req, res) => {
     res.status(200).json({ success: true, data: results });
 
   } catch (error) {
-    console.error('❌ Error fetching all project requests:', error.message);
+    console.error(' Error fetching all project requests:', error.message);
     res.status(500).json({ success: false, error: 'Failed to fetch requests.' });
   }
 };
 
 
-// ✅ ฟังก์ชันอัปเดตสถานะคำร้องโครงงาน (`pending` → `approved` หรือ `rejected`)
+//  ฟังก์ชันอัปเดตสถานะคำร้องโครงงาน (`pending` → `approved` หรือ `rejected`)
 exports.updateRequestStatus = async (req, res) => {
   const { requestId, status } = req.body;
 
@@ -159,12 +157,12 @@ exports.updateRequestStatus = async (req, res) => {
     res.status(200).json({ success: true });
 
   } catch (error) {
-    console.error('❌ Error updating request status:', error.message);
+    console.error(' Error updating request status:', error.message);
     res.status(500).json({ success: false, error: 'Failed to update status.' });
   }
 };
 
-// ✅ ฟังก์ชันลบคำร้องโครงงาน
+//  ฟังก์ชันลบคำร้องโครงงาน
 exports.deleteRequest = async (req, res) => {
   const { requestId } = req.params;
 
@@ -183,7 +181,7 @@ exports.deleteRequest = async (req, res) => {
     res.status(200).json({ success: true });
 
   } catch (error) {
-    console.error('❌ Error deleting request:', error.message);
+    console.error(' Error deleting request:', error.message);
     res.status(500).json({ success: false, error: 'Failed to delete request.' });
   }
 };

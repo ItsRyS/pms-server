@@ -13,9 +13,9 @@ const findDocumentById = async (documentId) => {
 
 // Upload document
 exports.uploadDocument = async (req, res) => {
-  //console.log('🚀 Request Headers:', req.headers);
-  //console.log('📂 Received file:', req.file);
-  //console.log('📝 Request Body:', req.body);
+  //console.log(' Request Headers:', req.headers);
+  //console.log(' Received file:', req.file);
+  //console.log(' Request Body:', req.body);
   const { request_id, type_id } = req.body;
   const file = req.file;
 
@@ -143,7 +143,7 @@ exports.returnDocument = async (req, res) => {
   const { documentId } = req.params;
   const file = req.file;
 
-  console.log("📂 File received:", file); // ✅ ตรวจสอบว่าไฟล์ถูกส่งมาหรือไม่
+  console.log(" File received:", file); //  ตรวจสอบว่าไฟล์ถูกส่งมาหรือไม่
 
   if (!file) return res.status(400).json({ message: 'File upload failed. No file received.' });
 
@@ -154,13 +154,13 @@ exports.returnDocument = async (req, res) => {
     const oldFileUrl = document.file_path;
     const oldFilePath = oldFileUrl.split('/').pop();
 
-    // 🚀 ลบไฟล์เก่าออกจาก Supabase
+    // ลบไฟล์เก่าออกจาก Supabase
     const { error: deleteError } = await supabase.storage
       .from('upload')
       .remove([`project-documents/${oldFilePath}`]);
 
     if (deleteError) {
-      console.warn("⚠️ Warning: Failed to delete old file from Supabase:", deleteError.message);
+      console.warn(" Warning: Failed to delete old file from Supabase:", deleteError.message);
     }
 
     // กำหนดชื่อไฟล์ใหม่ให้ปลอดภัย
@@ -176,9 +176,9 @@ exports.returnDocument = async (req, res) => {
     const uniqueFilename = `${Date.now()}_${sanitizedFilename}${fileExtension}`;
     const newFilePath = `project-documents/${uniqueFilename}`;
 
-    console.log("📤 Uploading new file:", newFilePath); // ✅ Debug ก่อนอัปโหลด
+    console.log("📤 Uploading new file:", newFilePath); //  Debug ก่อนอัปโหลด
 
-    // 🚀 อัปโหลดไฟล์ใหม่ไปที่ Supabase
+    // อัปโหลดไฟล์ใหม่ไปที่ Supabase
     const { error: uploadError } = await supabase.storage
       .from('upload')
       .upload(newFilePath, file.buffer, {
@@ -191,7 +191,7 @@ exports.returnDocument = async (req, res) => {
     // 🔗 สร้าง Public URL ใหม่
     const { data: { publicUrl: newFileUrl } } = supabase.storage.from('upload').getPublicUrl(newFilePath);
 
-    console.log("✅ New File URL:", newFileUrl); // ✅ Debug URL ของไฟล์ใหม่
+    console.log(" New File URL:", newFileUrl);
 
     // อัปเดตฐานข้อมูล
     await db.query(
@@ -201,7 +201,7 @@ exports.returnDocument = async (req, res) => {
 
     res.status(200).json({ message: 'Document returned successfully.', file_url: newFileUrl });
   } catch (error) {
-    console.error("❌ Error returning document:", error.message);
+    console.error(" Error returning document:", error.message);
     res.status(500).json({ message: 'Failed to return document.' });
   }
 };
@@ -212,7 +212,7 @@ exports.resubmitDocument = async (req, res) => {
   const { id } = req.params;
   const file = req.file;
 
-  console.log('📂 File received:', file);
+  console.log(' File received:', file);
 
   if (!file) {
     return res
@@ -236,7 +236,7 @@ exports.resubmitDocument = async (req, res) => {
 
     const { request_id, type_id, file_path: oldFileUrl } = documentDetails[0];
 
-    console.log('🔍 Old File URL:', oldFileUrl);
+    console.log(' Old File URL:', oldFileUrl);
 
     const oldFilePath = oldFileUrl.split('/').slice(-1)[0];
     const oldStoragePath = `project-documents/${oldFilePath}`;
@@ -247,7 +247,7 @@ exports.resubmitDocument = async (req, res) => {
 
     if (deleteError) {
       console.warn(
-        '⚠️ Failed to delete old file from Supabase:',
+        'Failed to delete old file from Supabase:',
         deleteError.message
       );
     }
@@ -279,7 +279,7 @@ exports.resubmitDocument = async (req, res) => {
       data: { publicUrl: newFileUrl },
     } = supabase.storage.from('upload').getPublicUrl(newFilePath);
 
-    console.log('✅ New File URL:', newFileUrl);
+    console.log(' New File URL:', newFileUrl);
 
     await connection.query(
       'DELETE FROM project_documents WHERE document_id = ?',
@@ -300,7 +300,7 @@ exports.resubmitDocument = async (req, res) => {
       });
   } catch (error) {
     await connection.rollback();
-    console.error('❌ Error resubmitting document:', error.message);
+    console.error(' Error resubmitting document:', error.message);
     res.status(500).json({ message: 'Failed to resubmit document.' });
   } finally {
     connection.release();
@@ -378,24 +378,24 @@ exports.deleteDocument = async (req, res) => {
     if (!document)
       return res.status(404).json({ message: 'Document not found.' });
 
-    // 🔍 ดึงชื่อไฟล์จาก URL Supabase
+    //  ดึงชื่อไฟล์จาก URL Supabase
     const fileUrl = document.file_path;
     const filePath = fileUrl.split('/').slice(-1)[0]; // ดึงชื่อไฟล์ออกมา
     const storagePath = `project-documents/${filePath}`; // กำหนดพาธใน Supabase Storage
 
-    // 🚀 ลบไฟล์จาก Supabase Storage
+    // ลบไฟล์จาก Supabase Storage
     const { error: deleteError } = await supabase.storage
       .from('upload') // เปลี่ยนให้ตรงกับชื่อ Bucket
       .remove([storagePath]);
 
     if (deleteError) {
       console.warn(
-        '⚠️ Warning: Failed to delete file from Supabase:',
+        'Warning: Failed to delete file from Supabase:',
         deleteError.message
       );
     }
 
-    // 🚀 ลบเอกสารจากฐานข้อมูล
+    //  ลบเอกสารจากฐานข้อมูล
     await db.query('DELETE FROM project_documents WHERE document_id = ?', [
       documentId,
     ]);
@@ -407,7 +407,7 @@ exports.deleteDocument = async (req, res) => {
           'Document deleted successfully from database and Supabase Storage.',
       });
   } catch (error) {
-    console.error('❌ Error deleting document:', error.message);
+    console.error(' Error deleting document:', error.message);
     res.status(500).json({ message: 'Failed to delete document.' });
   }
 };

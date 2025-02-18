@@ -40,7 +40,7 @@ exports.createTeacher = async (req, res) => {
         });
 
       if (uploadError) {
-        console.error('❌ Upload Error:', uploadError);
+        console.error(' Upload Error:', uploadError);
         throw uploadError;
       }
 
@@ -53,7 +53,7 @@ exports.createTeacher = async (req, res) => {
       }
 
       imageUrl = urlData.publicUrl;
-      console.log('✅ Image uploaded successfully:', imageUrl);
+      console.log(' Image uploaded successfully:', imageUrl);
     }
 
     const [result] = await db.query(
@@ -69,7 +69,7 @@ exports.createTeacher = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Error creating teacher:', error.message);
+    console.error(' Error creating teacher:', error.message);
     res.status(500).json({ error: 'Failed to create teacher: ' + error.message });
   }
 };
@@ -85,7 +85,7 @@ exports.getAllTeachers = async (req, res) => {
 
     res.status(200).json(teachers);
   } catch (error) {
-    console.error('❌ Error fetching teachers:', error.message);
+    console.error(' Error fetching teachers:', error.message);
     res.status(500).json({ error: 'Database query failed' });
   }
 };
@@ -110,7 +110,7 @@ exports.getTeacherById = async (req, res) => {
 
     res.status(200).json(teacher);
   } catch (error) {
-    console.error('❌ Error fetching teacher:', error.message);
+    console.error(' Error fetching teacher:', error.message);
     res.status(500).json({ error: 'Database query failed' });
   }
 };
@@ -148,7 +148,7 @@ exports.updateTeacher = async (req, res) => {
         });
 
       if (uploadError) {
-        console.error("❌ Supabase Upload Error:", uploadError.message);
+        console.error(" Supabase Upload Error:", uploadError.message);
         throw uploadError;
       }
 
@@ -161,7 +161,7 @@ exports.updateTeacher = async (req, res) => {
       }
 
       imageUrl = urlData.publicUrl;
-      console.log(`✅ File uploaded successfully: ${imageUrl}`);
+      console.log(` File uploaded successfully: ${imageUrl}`);
     }
 
     // อัพเดทข้อมูล
@@ -199,7 +199,7 @@ exports.updateTeacher = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Error updating teacher:', error);
+    console.error(' Error updating teacher:', error);
     res.status(500).json({
       message: 'Failed to update teacher',
       error: error.message
@@ -225,14 +225,14 @@ exports.deleteTeacher = async (req, res) => {
       const storageUrl = 'https://tgyexptoqpnoxcalnkyo.supabase.co/storage/v1/object/public/upload/';
       const filePath = fileUrl.replace(storageUrl, '');
 
-      console.log(`🗑️ Deleting file from Supabase: ${filePath}`);
+      console.log(` Deleting file from Supabase: ${filePath}`);
 
       const { error: deleteError } = await supabase.storage
         .from('upload')
         .remove([filePath]);
 
       if (deleteError) {
-        console.error(`❌ Supabase Delete Error: ${deleteError.message}`);
+        console.error(` Supabase Delete Error: ${deleteError.message}`);
         throw deleteError;
       }
     }
@@ -248,7 +248,7 @@ exports.deleteTeacher = async (req, res) => {
 
     res.status(200).json({ message: 'Teacher deleted successfully' });
   } catch (error) {
-    console.error('❌ Error deleting teacher:', error.message);
+    console.error(' Error deleting teacher:', error.message);
     res.status(500).json({
       error: 'Failed to delete teacher',
       message: error.message

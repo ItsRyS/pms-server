@@ -14,31 +14,31 @@ const pool = mysql.createPool({
   queueLimit: 0,
 }).promise();
 
-// ✅ ตรวจสอบการเชื่อมต่อฐานข้อมูล
+//  ตรวจสอบการเชื่อมต่อฐานข้อมูล
 const checkConnection = async () => {
   try {
     const connection = await pool.getConnection();
-    console.log(`✅ Connected to database: ${process.env.PROD_DB_NAME} at ${process.env.PROD_DB_HOST}:${process.env.PROD_DB_PORT}`);
+    console.log(` Connected to database: ${process.env.PROD_DB_NAME} at ${process.env.PROD_DB_HOST}:${process.env.PROD_DB_PORT}`);
     connection.release();
   } catch (error) {
-    console.error("❌ Database connection failed:", error.message);
+    console.error(" Database connection failed:", error.message);
     reconnectDatabase();
   }
 };
 
-// ✅ ฟังก์ชัน Reconnect กรณีฐานข้อมูลล่ม
+//  ฟังก์ชัน Reconnect กรณีฐานข้อมูลล่ม
 const reconnectDatabase = () => {
-  console.log("🔄 Attempting to reconnect to database...");
+  console.log(" Attempting to reconnect to database...");
   setTimeout(async () => {
     await checkConnection();
   }, 5000);
 };
 
-// ✅ ตรวจสอบการเชื่อมต่อเมื่อเริ่มต้นเซิร์ฟเวอร์
+//  ตรวจสอบการเชื่อมต่อเมื่อเริ่มต้นเซิร์ฟเวอร์
 checkConnection();
 
 pool.on("error", (err) => {
-  console.error("❌ Database error:", err);
+  console.error(" Database error:", err);
   if (err.code === "PROTOCOL_CONNECTION_LOST" || err.code === "ECONNRESET") {
     reconnectDatabase();
   } else {

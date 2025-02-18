@@ -2,7 +2,7 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const db = require("../config/db");
 
-// ✅ ฟังก์ชันสร้าง JWT Token
+//  ฟังก์ชันสร้าง JWT Token
 const generateToken = (user) => {
   return jwt.sign(
     { user_id: user.user_id, role: user.role, username: user.username },
@@ -11,7 +11,7 @@ const generateToken = (user) => {
   );
 };
 
-// ✅ ฟังก์ชันเข้าสู่ระบบ
+//  ฟังก์ชันเข้าสู่ระบบ
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -52,7 +52,7 @@ exports.login = async (req, res) => {
   }
 };
 
-// ✅ ฟังก์ชันสมัครสมาชิก
+//  ฟังก์ชันสมัครสมาชิก
 exports.register = async (req, res) => {
   try {
     const { username, email, password } = req.body;
@@ -74,7 +74,7 @@ exports.register = async (req, res) => {
   }
 };
 
-// ✅ ฟังก์ชันออกจากระบบ (ลบ Cookie)
+//  ฟังก์ชันออกจากระบบ (ลบ Cookie)
 exports.logout = (req, res) => {
   res.clearCookie("token", { httpOnly: true, secure: true, sameSite: "None" });
   res.status(200).json({ message: "Logout successful" });

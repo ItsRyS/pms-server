@@ -45,7 +45,7 @@ exports.addOldProject = async (req, res) => {
       .upload(filePath, req.file.buffer, { contentType: 'application/pdf' });
 
     if (uploadError) {
-      console.error('❌ ข้อผิดพลาดในการอัปโหลด Supabase:', uploadError.message);
+      console.error(' ข้อผิดพลาดในการอัปโหลด Supabase:', uploadError.message);
       return res.status(500).json({
         message: 'เกิดข้อผิดพลาดในการอัปโหลดไฟล์',
         error: uploadError.message
@@ -61,10 +61,10 @@ exports.addOldProject = async (req, res) => {
       throw new Error('ไม่สามารถสร้าง URL สาธารณะสำหรับไฟล์ได้');
     }
 
-    console.log(`✅ อัปโหลดไฟล์สำเร็จ: ${publicUrl}`);
+    console.log(` อัปโหลดไฟล์สำเร็จ: ${publicUrl}`);
 
     // ตรวจสอบข้อมูลก่อนบันทึก
-    console.log('📝 ข้อมูลที่จะบันทึก:', {
+    console.log(' ข้อมูลที่จะบันทึก:', {
       old_project_name_th,
       old_project_name_eng,
       project_type,
@@ -91,14 +91,14 @@ exports.addOldProject = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ ข้อผิดพลาดในการบันทึกโครงงาน:', error.message);
+    console.error(' ข้อผิดพลาดในการบันทึกโครงงาน:', error.message);
 
     // ถ้าเกิดข้อผิดพลาด ให้พยายามลบไฟล์ที่อัปโหลดไปแล้ว
     if (filePath) {
       try {
         await supabase.storage.from('upload').remove([filePath]);
       } catch (deleteError) {
-        console.error('❌ ไม่สามารถลบไฟล์ที่อัปโหลดได้:', deleteError.message);
+        console.error(' ไม่สามารถลบไฟล์ที่อัปโหลดได้:', deleteError.message);
       }
     }
 
@@ -110,7 +110,7 @@ exports.addOldProject = async (req, res) => {
 };
 
 
-// ✅ ฟังก์ชันดึงข้อมูลโครงงานเก่าทั้งหมด
+//  ฟังก์ชันดึงข้อมูลโครงงานเก่าทั้งหมด
 exports.getOldProjects = async (req, res) => {
   try {
     const [results] = await db.query(
@@ -118,12 +118,12 @@ exports.getOldProjects = async (req, res) => {
     );
     res.status(200).json(results);
   } catch (error) {
-    console.error('❌ Error fetching old projects:', error.message);
+    console.error(' Error fetching old projects:', error.message);
     res.status(500).json({ message: 'Database query failed' });
   }
 };
 
-// ✅ ฟังก์ชันอัปเดตโครงงานเก่า
+//  ฟังก์ชันอัปเดตโครงงานเก่า
 exports.updateOldProject = async (req, res) => {
   let newFilePath = null;
 
@@ -136,7 +136,7 @@ exports.updateOldProject = async (req, res) => {
       document_year,
     } = req.body;
 
-    // 🔍 ดึงข้อมูลโครงงานเก่า
+    //  ดึงข้อมูลโครงงานเก่า
     const [existingProject] = await db.query(
       'SELECT file_path FROM old_projects WHERE old_id = ?',
       [id]
@@ -148,9 +148,9 @@ exports.updateOldProject = async (req, res) => {
 
     let fileUrl = existingProject[0].file_path;
 
-    // ✅ ถ้ามีการอัปโหลดไฟล์ใหม่
+    //  ถ้ามีการอัปโหลดไฟล์ใหม่
     if (req.file) {
-      // ✅ ใช้ sanitizeFilename() เพื่อแก้ปัญหาชื่อไฟล์ภาษาไทยหรืออักขระพิเศษ
+      //  ใช้ sanitizeFilename() เพื่อแก้ปัญหาชื่อไฟล์ภาษาไทยหรืออักขระพิเศษ
       const fileExtension = path.extname(req.file.originalname);
       const baseFilename = path.basename(req.file.originalname, fileExtension);
       const sanitizedFilename = sanitizeFilename(baseFilename) + fileExtension;
@@ -158,7 +158,7 @@ exports.updateOldProject = async (req, res) => {
 
       newFilePath = `old_projects/${uniqueFilename}`;
 
-      // ✅ อัปโหลดไฟล์ใหม่
+      //  อัปโหลดไฟล์ใหม่
       const { error: uploadError } = await supabase.storage
         .from('upload')
         .upload(newFilePath, req.file.buffer, {
@@ -167,14 +167,14 @@ exports.updateOldProject = async (req, res) => {
         });
 
       if (uploadError) {
-        console.error('❌ ข้อผิดพลาดในการอัปโหลด:', uploadError.message);
+        console.error(' ข้อผิดพลาดในการอัปโหลด:', uploadError.message);
         return res.status(500).json({
           message: 'เกิดข้อผิดพลาดในการอัปโหลดไฟล์',
           error: uploadError.message
         });
       }
 
-      // ✅ สร้าง URL ใหม่
+      //  สร้าง URL ใหม่
       const { data: { publicUrl } } = supabase.storage
         .from('upload')
         .getPublicUrl(newFilePath);
@@ -183,7 +183,7 @@ exports.updateOldProject = async (req, res) => {
         throw new Error('ไม่สามารถสร้าง URL สาธารณะสำหรับไฟล์ได้');
       }
 
-      // ✅ ลบไฟล์เก่าถ้ามี
+      //  ลบไฟล์เก่าถ้ามี
       if (fileUrl) {
         try {
           const oldFilePath = new URL(fileUrl).pathname.split('/upload/')[1];
@@ -191,14 +191,14 @@ exports.updateOldProject = async (req, res) => {
             .from('upload')
             .remove([oldFilePath]);
         } catch (deleteError) {
-          console.warn('⚠️ ไม่สามารถลบไฟล์เก่าได้:', deleteError.message);
+          console.warn('ไม่สามารถลบไฟล์เก่าได้:', deleteError.message);
         }
       }
 
       fileUrl = publicUrl;
     }
 
-    // ✅ อัปเดตข้อมูลในฐานข้อมูล
+    //  อัปเดตข้อมูลในฐานข้อมูล
     const updateQuery = `
       UPDATE old_projects
       SET
@@ -225,7 +225,7 @@ exports.updateOldProject = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ ข้อผิดพลาดในการอัปเดตโครงงาน:', error.message);
+    console.error(' ข้อผิดพลาดในการอัปเดตโครงงาน:', error.message);
 
     // ถ้าเกิดข้อผิดพลาดและมีการอัปโหลดไฟล์ใหม่ ให้ลบไฟล์ที่เพิ่งอัปโหลด
     if (newFilePath) {
@@ -234,7 +234,7 @@ exports.updateOldProject = async (req, res) => {
           .from('upload')
           .remove([newFilePath]);
       } catch (deleteError) {
-        console.error('❌ ไม่สามารถลบไฟล์ที่อัปโหลดได้:', deleteError.message);
+        console.error(' ไม่สามารถลบไฟล์ที่อัปโหลดได้:', deleteError.message);
       }
     }
 
@@ -246,12 +246,12 @@ exports.updateOldProject = async (req, res) => {
 };
 
 
-// ✅ ฟังก์ชันลบโครงงานเก่า
+//  ฟังก์ชันลบโครงงานเก่า
 exports.deleteOldProject = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // 🔍 ดึงข้อมูลโครงงานที่ต้องการลบ
+    //  ดึงข้อมูลโครงงานที่ต้องการลบ
     const [existingProject] = await db.query(
       'SELECT file_path FROM old_projects WHERE old_id = ?',
       [id]
@@ -263,7 +263,7 @@ exports.deleteOldProject = async (req, res) => {
 
     const fileUrl = existingProject[0].file_path;
 
-    // ✅ ลบไฟล์จาก Supabase ถ้ามี
+    //  ลบไฟล์จาก Supabase ถ้ามี
     if (fileUrl) {
       const storageUrl =
         'https://tgyexptoqpnoxcalnkyo.supabase.co/storage/v1/object/public/upload/';
@@ -274,19 +274,19 @@ exports.deleteOldProject = async (req, res) => {
         .remove([filePath]);
 
       if (error) {
-        console.error('❌ Supabase Delete Error:', error.message);
+        console.error(' Supabase Delete Error:', error.message);
         return res
           .status(500)
           .json({ message: 'Failed to delete file from Supabase' });
       }
     }
 
-    // ✅ ลบข้อมูลจากฐานข้อมูล
+    //  ลบข้อมูลจากฐานข้อมูล
     await db.query('DELETE FROM old_projects WHERE old_id = ?', [id]);
 
     res.status(200).json({ message: 'Old project deleted successfully' });
   } catch (error) {
-    console.error('❌ Error deleting old project:', error.message);
+    console.error(' Error deleting old project:', error.message);
     res.status(500).json({ message: 'Database delete failed' });
   }
 };
