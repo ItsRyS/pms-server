@@ -82,7 +82,7 @@ const oldProjectsRoutes = require("./src/routes/oldProjects");
 // API Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/projects", verifyToken, projectRoutes);
-app.use("/api/teacher", verifyToken, teacherRoutes);
+app.use("/api/teacher",  teacherRoutes);
 app.use("/api/document", verifyToken, documentRoutes);
 app.use("/api/users", verifyToken, userRoutes);
 app.use("/api/project-requests", verifyToken, projectRequestsRoutes);
@@ -90,7 +90,7 @@ app.use("/api/document-types", verifyToken, projectDocumentsRoutes);
 app.use("/api/project-documents", verifyToken, projectDocumentsRoutes);
 app.use("/api/project-release", verifyToken, projectReleaseRoutes);
 app.use("/api/project-types", verifyToken, projectTypesRoutes);
-app.use("/api/old-projects", verifyToken, oldProjectsRoutes);
+app.use("/api/old-projects",  oldProjectsRoutes);
 
 // Test API
 app.get("/api/test", (req, res) => {
