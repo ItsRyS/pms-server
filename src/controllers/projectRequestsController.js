@@ -110,15 +110,9 @@ exports.getAllRequests = async (req, res) => {
   try {
     const [results] = await db.query(
       `
-      SELECT
-        pr.request_id,
-        pr.project_name,
-        pr.project_name_eng,
-        pr.status,
-        pr.created_at,
-        pr.student_id,
-        u.username AS student_name,
-        t.teacher_name
+      SELECT DISTINCT pr.request_id, pr.project_name, pr.project_name_eng,
+        pr.status, pr.created_at, pr.student_id,
+        u.username AS student_name, t.teacher_name
       FROM project_requests pr
       JOIN students_projects sp ON pr.request_id = sp.request_id
       JOIN users u ON pr.student_id = u.user_id
@@ -128,13 +122,11 @@ exports.getAllRequests = async (req, res) => {
     );
 
     res.status(200).json({ success: true, data: results });
-
   } catch (error) {
     console.error(' Error fetching all project requests:', error.message);
     res.status(500).json({ success: false, error: 'Failed to fetch requests.' });
   }
 };
-
 
 //  ฟังก์ชันอัปเดตสถานะคำร้องโครงงาน (`pending` → `approved` หรือ `rejected`)
 exports.updateRequestStatus = async (req, res) => {
