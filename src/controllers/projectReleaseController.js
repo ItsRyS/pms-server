@@ -24,13 +24,12 @@ exports.getCompleteReport = async (req, res) => {
       });
     }
 
-    //  แก้ไขให้ Path ถูกต้อง
     let documentPath = projectCheck[0].complete_report_path.replace(/\\/g, '/');
-    documentPath = documentPath.replace(/^upload\/project-documents\//, ''); // ลบ path ซ้ำที่อาจเกิดขึ้น
+    documentPath = documentPath.replace(/^upload\/project-documents\//, '');
 
     res.status(200).json({
       success: true,
-      documentPath: `/upload/project-documents/${documentPath}`,
+      documentPath: `https://tgyexptoqpnoxcalnkyo.supabase.co/storage/v1/object/public/project-documents/${documentPath}`,
     });
   } catch (error) {
     console.error('Error fetching complete report:', error);
