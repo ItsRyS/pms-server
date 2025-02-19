@@ -1,21 +1,24 @@
 const db = require('../config/db');
 const supabase = require('../config/supabaseClient');
 const path = require('path');
-// Helper functions
+const sendEmail = require('../utils/emailService');
 
-const findDocumentById = async (documentId) => {
+{/*const findDocumentById = async (documentId) => {
   const [document] = await db.query(
     'SELECT * FROM project_documents WHERE document_id = ?',
     [documentId]
   );
   return document[0];
+};*/}
+const findDocumentById = async (documentId) => {
+  const [document] = await db.query(
+    'SELECT pd.file_path, pd.status, pr.project_name, u.email, u.username AS student_name FROM project_documents pd JOIN project_requests pr ON pd.request_id = pr.request_id JOIN users u ON pr.student_id = u.user_id WHERE pd.document_id = ?',
+    [documentId]
+  );
+  return document[0];
 };
-
 // Upload document
 exports.uploadDocument = async (req, res) => {
-  //console.log(' Request Headers:', req.headers);
-  //console.log(' Received file:', req.file);
-  //console.log(' Request Body:', req.body);
   const { request_id, type_id } = req.body;
   const file = req.file;
 
@@ -97,23 +100,33 @@ exports.approveDocument = async (req, res) => {
   const { documentId } = req.params;
 
   try {
-    const result = await db.query(
+    const document = await findDocumentById(documentId);
+    if (!document) return res.status(404).json({ message: 'Document not found.' });
+
+    // อัปเดตสถานะเอกสารในฐานข้อมูล
+    await db.query(
       "UPDATE project_documents SET status = 'approved', reject_reason = NULL WHERE document_id = ?",
       [documentId]
     );
 
-    if (result[0].affectedRows > 0) {
-      res.status(200).json({ message: 'Document approved successfully.' });
-    } else {
-      res.status(404).json({ message: 'Document not found.' });
-    }
+    // ส่งอีเมลแจ้งเตือน
+    await sendEmail(
+      document.email,
+      '📄 เอกสารของคุณได้รับการอนุมัติแล้ว!',
+      `<p>สวัสดีคุณ <strong>${document.student_name}</strong>,</p>
+      <p>เอกสารของคุณสำหรับโครงงาน <strong>"${document.project_name}"</strong> ได้รับการอนุมัติแล้ว ✅</p>
+      <p>ดูเอกสารของคุณได้ที่: <a href="${document.file_path}">${document.file_path}</a></p>`
+    );
+
+    res.status(200).json({ message: 'Document approved and email sent.' });
+
   } catch (error) {
-    console.error('Error approving document:', error.message);
+    console.error('❌ Error approving document:', error.message);
     res.status(500).json({ message: 'Failed to approve document.' });
   }
 };
 
-// Reject document
+// ✅ **ฟังก์ชัน: ปฏิเสธเอกสาร (reject)**
 exports.rejectDocument = async (req, res) => {
   const { documentId } = req.params;
   const { reason } = req.body;
@@ -121,29 +134,37 @@ exports.rejectDocument = async (req, res) => {
   if (!reason) return res.status(400).json({ message: 'Reason is required.' });
 
   try {
-    const result = await db.query(
+    const document = await findDocumentById(documentId);
+    if (!document) return res.status(404).json({ message: 'Document not found.' });
+
+    // อัปเดตสถานะเอกสารในฐานข้อมูล
+    await db.query(
       "UPDATE project_documents SET status = 'rejected', reject_reason = ? WHERE document_id = ?",
       [reason, documentId]
     );
 
-    if (result[0].affectedRows > 0) {
-      res.status(200).json({ message: 'Document rejected successfully.' });
-    } else {
-      res.status(404).json({ message: 'Document not found.' });
-    }
+    // ส่งอีเมลแจ้งเตือน
+    await sendEmail(
+      document.email,
+      '⛔ เอกสารของคุณถูกปฏิเสธ',
+      `<p>สวัสดีคุณ <strong>${document.student_name}</strong>,</p>
+      <p>เอกสารของคุณสำหรับโครงงาน <strong>"${document.project_name}"</strong> ถูกปฏิเสธ ❌</p>
+      <p>เหตุผล: <strong>${reason}</strong></p>
+      <p>กรุณาตรวจสอบและแก้ไขตามคำแนะนำ</p>`
+    );
+
+    res.status(200).json({ message: 'Document rejected and email sent.' });
+
   } catch (error) {
-    console.error('Error rejecting document:', error.message);
+    console.error('❌ Error rejecting document:', error.message);
     res.status(500).json({ message: 'Failed to reject document.' });
   }
 };
 
-// Return document
-
+// ✅ **ฟังก์ชัน: คืนเอกสารให้ผู้ส่ง (return)**
 exports.returnDocument = async (req, res) => {
   const { documentId } = req.params;
   const file = req.file;
-
-  console.log(" File received:", file); //  ตรวจสอบว่าไฟล์ถูกส่งมาหรือไม่
 
   if (!file) return res.status(400).json({ message: 'File upload failed. No file received.' });
 
@@ -151,6 +172,7 @@ exports.returnDocument = async (req, res) => {
     const document = await findDocumentById(documentId);
     if (!document) return res.status(404).json({ message: 'Document not found.' });
 
+    // ดึงชื่อไฟล์เก่าเพื่อลบออกจาก Supabase
     const oldFileUrl = document.file_path;
     const oldFilePath = oldFileUrl.split('/').pop();
 
@@ -159,39 +181,27 @@ exports.returnDocument = async (req, res) => {
       .from('upload')
       .remove([`project-documents/${oldFilePath}`]);
 
-    if (deleteError) {
-      console.warn(" Warning: Failed to delete old file from Supabase:", deleteError.message);
-    }
+    if (deleteError) console.warn("Warning: Failed to delete old file from Supabase:", deleteError.message);
 
-    // กำหนดชื่อไฟล์ใหม่ให้ปลอดภัย
+    // อัปโหลดไฟล์ใหม่ไปที่ Supabase
     const fileExtension = path.extname(file.originalname);
     const baseFilename = path.basename(file.originalname, fileExtension);
     const sanitizedFilename = baseFilename
       .normalize('NFC')
-      .replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-zA-Z0-9ก-๙._-]/g, '_')
-      .replace(/_{2,}/g, '_')
       .replace(/^_+|_+$/g, '');
 
     const uniqueFilename = `${Date.now()}_${sanitizedFilename}${fileExtension}`;
     const newFilePath = `project-documents/${uniqueFilename}`;
 
-    console.log("📤 Uploading new file:", newFilePath); //  Debug ก่อนอัปโหลด
-
-    // อัปโหลดไฟล์ใหม่ไปที่ Supabase
     const { error: uploadError } = await supabase.storage
       .from('upload')
-      .upload(newFilePath, file.buffer, {
-        contentType: file.mimetype,
-        upsert: true,
-      });
+      .upload(newFilePath, file.buffer, { contentType: file.mimetype, upsert: true });
 
     if (uploadError) throw uploadError;
 
-    // 🔗 สร้าง Public URL ใหม่
+    // ดึง URL ใหม่
     const { data: { publicUrl: newFileUrl } } = supabase.storage.from('upload').getPublicUrl(newFilePath);
-
-    console.log(" New File URL:", newFileUrl);
 
     // อัปเดตฐานข้อมูล
     await db.query(
@@ -199,9 +209,19 @@ exports.returnDocument = async (req, res) => {
       [newFileUrl, documentId]
     );
 
-    res.status(200).json({ message: 'Document returned successfully.', file_url: newFileUrl });
+    // ส่งอีเมลแจ้งเตือน
+    await sendEmail(
+      document.email,
+      '🔄 เอกสารของคุณถูกส่งคืน',
+      `<p>สวัสดีคุณ <strong>${document.student_name}</strong>,</p>
+      <p>เอกสารของคุณสำหรับโครงงาน <strong>"${document.project_name}"</strong> ถูกส่งคืน 🔄</p>
+      <p>กรุณาตรวจสอบและส่งใหม่ได้ที่: <a href="${newFileUrl}">${newFileUrl}</a></p>`
+    );
+
+    res.status(200).json({ message: 'Document returned and email sent.', file_url: newFileUrl });
+
   } catch (error) {
-    console.error(" Error returning document:", error.message);
+    console.error('❌ Error returning document:', error.message);
     res.status(500).json({ message: 'Failed to return document.' });
   }
 };

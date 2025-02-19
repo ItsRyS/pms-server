@@ -1,5 +1,5 @@
 const db = require('../config/db');
-
+const sendEmail = require('../utils/emailService');
 // ฟังก์ชันสร้างคำร้องโครงงานใหม่
 exports.createRequest = async (req, res) => {
   const {
@@ -137,6 +137,22 @@ exports.updateRequestStatus = async (req, res) => {
   }
 
   try {
+    // ดึงข้อมูลโครงงานและนักศึกษา
+    const [project] = await db.query(
+      `SELECT pr.project_name, u.email, u.username AS student_name
+       FROM project_requests pr
+       JOIN users u ON pr.student_id = u.user_id
+       WHERE pr.request_id = ?`,
+      [requestId]
+    );
+
+    if (!project.length) {
+      return res.status(404).json({ success: false, error: 'Project request not found.' });
+    }
+
+    const { project_name, email, student_name } = project[0];
+
+    // อัปเดตสถานะโครงงานในฐานข้อมูล
     const [result] = await db.query(
       `UPDATE project_requests SET status = ?, updated_at = NOW() WHERE request_id = ?`,
       [status, requestId]
@@ -146,11 +162,31 @@ exports.updateRequestStatus = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Request not found.' });
     }
 
-    res.status(200).json({ success: true });
+    let emailSubject, emailContent;
+
+    if (status === 'approved') {
+      emailSubject = '🎉 โครงงานของคุณได้รับการอนุมัติ!';
+      emailContent = `
+        <p>สวัสดีคุณ <strong>${student_name}</strong>,</p>
+        <p>โครงงานของคุณ <strong>"${project_name}"</strong> ได้รับการอนุมัติแล้ว!</p>
+        <p>คุณสามารถดำเนินการขั้นตอนถัดไปได้ที่ <a href="${process.env.FRONTEND_URL}/studentPage">ส่งเอกสารโครงงาน</a></p>
+      `;
+    } else if (status === 'rejected') {
+      emailSubject = '⛔ โครงงานของคุณถูกปฏิเสธ';
+      emailContent = `
+        <p>สวัสดีคุณ <strong>${student_name}</strong>,</p>
+        <p>โครงงานของคุณ <strong>"${project_name}"</strong> ถูกปฏิเสธ</p>
+        <p>กรุณาติดต่ออาจารย์ที่ปรึกษาหรือแก้ไขข้อมูลและส่งคำร้องใหม่</p>
+      `;
+    }
+
+    await sendEmail(email, emailSubject, emailContent);
+
+    res.status(200).json({ success: true, message: 'Project status updated and email sent' });
 
   } catch (error) {
-    console.error(' Error updating request status:', error.message);
-    res.status(500).json({ success: false, error: 'Failed to update status.' });
+    console.error('❌ Error updating request status:', error.message);
+    res.status(500).json({ success: false, error: 'Failed to update status' });
   }
 };
 
