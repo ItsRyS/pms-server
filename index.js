@@ -88,7 +88,7 @@ app.use("/api/users", verifyToken, userRoutes);
 app.use("/api/project-requests", verifyToken, projectRequestsRoutes);
 app.use("/api/document-types", verifyToken, projectDocumentsRoutes);
 app.use("/api/project-documents", verifyToken, projectDocumentsRoutes);
-app.use("/api/project-release", verifyToken, projectReleaseRoutes);
+app.use("/api/project-release",  projectReleaseRoutes);
 app.use("/api/project-types", verifyToken, projectTypesRoutes);
 app.use("/api/old-projects",  oldProjectsRoutes);
 
