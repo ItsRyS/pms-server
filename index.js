@@ -79,7 +79,7 @@ const projectReleaseRoutes = require("./src/routes/projectRelease");
 const projectTypesRoutes = require("./src/routes/projectTypes");
 const oldProjectsRoutes = require("./src/routes/oldProjects");
 const adminDashboardRoutes = require("./src/routes/AdminDash");
-const railwayRoutes = require("./src/routes/railway");
+
 
 
 
@@ -97,7 +97,7 @@ app.use("/api/project-release",  projectReleaseRoutes);
 app.use("/api/project-types", verifyToken, projectTypesRoutes);
 app.use("/api/old-projects",  oldProjectsRoutes);
 app.use("/api/admin-dashboard", verifyToken, adminDashboardRoutes);
-app.use("/api/railway", railwayRoutes);
+
 
 // Test API
 app.get("/api/test", (req, res) => {
