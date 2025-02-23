@@ -78,7 +78,8 @@ const projectDocumentsRoutes = require("./src/routes/project_documents");
 const projectReleaseRoutes = require("./src/routes/projectRelease");
 const projectTypesRoutes = require("./src/routes/projectTypes");
 const oldProjectsRoutes = require("./src/routes/oldProjects");
-const adminDashboardRoutes = require("./src/routes/adminDashboard");
+const adminDashboardRoutes = require("./src/routes/AdminDash"); 
+
 
 
 // API Routes
