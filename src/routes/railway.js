@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
-const { getRailwayStatus } = require("../controllers/RailwayController");
+const { getRailwayServiceStatus } = require("../controllers/RailwayController");
 
-router.get("/status", getRailwayStatus);
+router.get("/status", getRailwayServiceStatus);
 
 module.exports = router;
