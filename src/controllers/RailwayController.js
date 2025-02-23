@@ -5,12 +5,11 @@ const PROJECT_ID = process.env.RAILWAY_PROJECT_ID;
 
 const getRailwayServiceStatus = async (req, res) => {
   try {
-    console.log("🔍 Checking Environment Variables...");
-    console.log("RAILWAY_PROJECT_ID:", PROJECT_ID);
-    console.log("RAILWAY_API_TOKEN:", RAILWAY_API_TOKEN ? "EXISTS" : "MISSING");
-
     if (!RAILWAY_API_TOKEN || !PROJECT_ID) {
-      return res.status(500).json({ message: "Missing API Token or Project ID" });
+      return res.status(500).json({
+        error: "configuration",
+        message: "Missing API Token or Project ID"
+      });
     }
 
     const response = await axios.post(
@@ -22,9 +21,14 @@ const getRailwayServiceStatus = async (req, res) => {
               services {
                 id
                 name
+                serviceInstances {
+                  id
+                  state
+                }
                 latestDeployment {
                   id
                   status
+                  createdAt
                   updatedAt
                 }
               }
@@ -40,23 +44,28 @@ const getRailwayServiceStatus = async (req, res) => {
       }
     );
 
-    console.log("Railway API Response:", response.data);
-
-    if (!response.data || !response.data.data || !response.data.data.project) {
-      return res.status(500).json({ message: "Invalid response from Railway API", data: response.data });
+    if (!response.data?.data?.project) {
+      throw new Error("Invalid response from Railway API");
     }
 
     const services = response.data.data.project.services.map((service) => ({
       id: service.id,
       name: service.name,
-      status: service.latestDeployment ? service.latestDeployment.status : "UNKNOWN",
-      updatedAt: service.latestDeployment ? service.latestDeployment.updatedAt : null,
+      status: service.latestDeployment?.status || "NO_DEPLOYMENT",
+      state: service.serviceInstances?.[0]?.state || "UNKNOWN",
+      updatedAt: service.latestDeployment?.updatedAt || null,
     }));
 
     res.status(200).json({ services });
   } catch (error) {
-    console.error("🚨 Error fetching Railway service status:", error.response ? error.response.data : error.message);
-    res.status(500).json({ message: "Error fetching Railway service status", error: error.response ? error.response.data : error.message });
+    console.error("Railway service status error:", error);
+
+    const errorResponse = {
+      error: error.response?.data?.errors?.[0]?.message || error.message,
+      message: "Error fetching Railway service status"
+    };
+
+    res.status(500).json(errorResponse);
   }
 };
 
