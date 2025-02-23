@@ -1,10 +1,18 @@
 const axios = require("axios");
 
-const RAILWAY_API_TOKEN = process.env.RAILWAY_API_TOKEN; // นำจาก Railway Dashboard
-const PROJECT_ID = process.env.RAILWAY_PROJECT_ID; // นำจาก Railway Dashboard
+const RAILWAY_API_TOKEN = process.env.RAILWAY_API_TOKEN;
+const PROJECT_ID = process.env.RAILWAY_PROJECT_ID;
 
 const getRailwayServiceStatus = async (req, res) => {
   try {
+    console.log("🔍 Checking Environment Variables...");
+    console.log("RAILWAY_PROJECT_ID:", PROJECT_ID);
+    console.log("RAILWAY_API_TOKEN:", RAILWAY_API_TOKEN ? "EXISTS" : "MISSING");
+
+    if (!RAILWAY_API_TOKEN || !PROJECT_ID) {
+      return res.status(500).json({ message: "Missing API Token or Project ID" });
+    }
+
     const response = await axios.post(
       "https://backboard.railway.app/graphql/v2",
       {
@@ -31,10 +39,11 @@ const getRailwayServiceStatus = async (req, res) => {
         },
       }
     );
-    console.error("Response from Railway API:", response.data);
-    // ตรวจสอบ Response
+
+    console.log("Railway API Response:", response.data);
+
     if (!response.data || !response.data.data || !response.data.data.project) {
-      return res.status(500).json({ message: "Invalid response from Railway API" });
+      return res.status(500).json({ message: "Invalid response from Railway API", data: response.data });
     }
 
     const services = response.data.data.project.services.map((service) => ({
@@ -46,10 +55,9 @@ const getRailwayServiceStatus = async (req, res) => {
 
     res.status(200).json({ services });
   } catch (error) {
-    console.error("Error fetching Railway service status:", error);
-    res.status(500).json({ message: "Error fetching Railway service status" });
+    console.error("🚨 Error fetching Railway service status:", error.response ? error.response.data : error.message);
+    res.status(500).json({ message: "Error fetching Railway service status", error: error.response ? error.response.data : error.message });
   }
 };
-
 
 module.exports = { getRailwayServiceStatus };
