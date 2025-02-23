@@ -31,6 +31,11 @@ const getRailwayServiceStatus = async (req, res) => {
         },
       }
     );
+    console.error("Response from Railway API:", response.data);
+    // ตรวจสอบ Response
+    if (!response.data || !response.data.data || !response.data.data.project) {
+      return res.status(500).json({ message: "Invalid response from Railway API" });
+    }
 
     const services = response.data.data.project.services.map((service) => ({
       id: service.id,
@@ -45,5 +50,6 @@ const getRailwayServiceStatus = async (req, res) => {
     res.status(500).json({ message: "Error fetching Railway service status" });
   }
 };
+
 
 module.exports = { getRailwayServiceStatus };
