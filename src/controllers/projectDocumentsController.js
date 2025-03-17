@@ -126,7 +126,7 @@ exports.approveDocument = async (req, res) => {
   }
 };
 
-// ✅ **ฟังก์ชัน: ปฏิเสธเอกสาร (reject)**
+//  **ฟังก์ชัน: ปฏิเสธเอกสาร (reject)**
 exports.rejectDocument = async (req, res) => {
   const { documentId } = req.params;
   const { reason } = req.body;
@@ -161,7 +161,7 @@ exports.rejectDocument = async (req, res) => {
   }
 };
 
-// ✅ **ฟังก์ชัน: คืนเอกสารให้ผู้ส่ง (return)**
+//  **ฟังก์ชัน: คืนเอกสารให้ผู้ส่ง (return)**
 exports.returnDocument = async (req, res) => {
   const { documentId } = req.params;
   const file = req.file;
@@ -221,7 +221,7 @@ exports.returnDocument = async (req, res) => {
     res.status(200).json({ message: 'Document returned and email sent.', file_url: newFileUrl });
 
   } catch (error) {
-    console.error('❌ Error returning document:', error.message);
+    console.error(' Error returning document:', error.message);
     res.status(500).json({ message: 'Failed to return document.' });
   }
 };
@@ -284,7 +284,7 @@ exports.resubmitDocument = async (req, res) => {
     const uniqueFilename = `${Date.now()}_${sanitizedFilename}${fileExtension}`;
     const newFilePath = `project-documents/${uniqueFilename}`;
 
-    console.log('📤 Uploading new file:', newFilePath);
+    console.log(' Uploading new file:', newFilePath);
 
     const { error: uploadError } = await supabase.storage
       .from('upload')
@@ -405,7 +405,7 @@ exports.deleteDocument = async (req, res) => {
 
     // ลบไฟล์จาก Supabase Storage
     const { error: deleteError } = await supabase.storage
-      .from('upload') // เปลี่ยนให้ตรงกับชื่อ Bucket
+      .from('upload')
       .remove([storagePath]);
 
     if (deleteError) {

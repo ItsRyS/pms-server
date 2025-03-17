@@ -52,10 +52,10 @@ exports.updateUser = async (req, res) => {
   const { id } = req.params;
   const { username, email, role, password } = req.body;
 
-  console.log('Request Payload:', { username, email, role, password }); // Log the payload
+  console.log('Request Payload:', { username, email, role, password }); 
 
   if (!username || !email || !role) {
-    // ตรวจสอบ role ด้วย
+
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
@@ -103,11 +103,11 @@ exports.deleteUser = async (req, res) => {
   }
 };
 
-// Fetch current user data
+
 
 exports.uploadProfileImage = async (req, res) => {
   try {
-    // 1. Validate request
+
     if (!req.user || !req.user.user_id) {
       return res.status(401).json({ error: 'Unauthorized: User not found' });
     }
@@ -116,27 +116,25 @@ exports.uploadProfileImage = async (req, res) => {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    // 2. Validate file type
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
+    const allowedTypes = ['image/jpeg', 'image/png'];
     if (!allowedTypes.includes(req.file.mimetype)) {
       return res.status(400).json({
-        error: 'Invalid file type. Only JPG, PNG and GIF are allowed'
+        error: 'Invalid file type. Only JPG, PNG  are allowed'
       });
     }
 
     const userId = req.user.user_id;
     const file = req.file;
 
-    // 3. Prepare filename
     const fileExtension = path.extname(file.originalname);
     const baseFilename = path.basename(file.originalname, fileExtension);
     const sanitizedFilename = sanitizeFilename(baseFilename);
     const filePath = `profile-images/${userId}_${Date.now()}_${sanitizedFilename}${fileExtension}`;
 
-    // 4. Read file
+
     const fileBuffer = fs.readFileSync(file.path);
 
-    // 5. Upload to Supabase
+
     const { error: uploadError } = await supabase.storage
       .from('upload')
       .upload(filePath, fileBuffer, {
@@ -152,7 +150,7 @@ exports.uploadProfileImage = async (req, res) => {
         details: uploadError.message
       });
     }
-    
+
     const { data: urlData } = supabase.storage
       .from('upload')
       .getPublicUrl(filePath);
